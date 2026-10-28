@@ -156,7 +156,7 @@ Supported asset selection details:
 
 1. Push this repository to GitHub.
 2. In Render, choose **New → Blueprint** and select the repository. `render.yaml` creates `mcm98-launcher-api`.
-3. Set `GITHUB_TOKEN` when prompted (it is marked `sync: false`, so it is never stored in the repository).
+3. Set `GITHUB_TOKEN` when prompted (it is marked `sync: false`, so it is never stored in the repository). Use a fine-grained personal access token, not a GitHub App private key or JWT; see [GitHub token for private repositories](#github-token-for-private-repositories).
 4. Deploy. Copy the service URL, for example `https://mcm98-launcher-api.onrender.com`.
 5. Put that URL into the launcher's **Settings**, or bake it in at build time with `MAIN_VITE_BACKEND_URL`.
 
@@ -168,11 +168,30 @@ Supported asset selection details:
 - Health check path: `/api/health`
 - Runtime: Node 22.12+
 
+### GitHub token for private repositories
+
+The relay needs a **personal access token** that can read the repository. The simplest option is a fine-grained token:
+
+1. In GitHub, open **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
+2. Under **Repository access**, choose **Only select repositories** and select the private repository (for example, `MustacheHax/StreamFriend`).
+3. Under **Permissions → Repository permissions**, set **Contents** to **Read-only**. **Metadata** is included automatically.
+4. Generate the token and copy the value beginning with `github_pat_`.
+5. In Render, open the relay service → **Environment**, set `GITHUB_TOKEN` to exactly that value, and save. The value must not include quotes, `Bearer`, or line breaks.
+6. Redeploy the relay and refresh the launcher.
+
+Do **not** put any of these in `GITHUB_TOKEN`:
+
+- A GitHub App **private key** (the `-----BEGIN … PRIVATE KEY-----` block, or its base64 body starting with `MII`).
+- A GitHub App **JWT** (starts with `eyJ`). It is only accepted by GitHub's `/app` endpoints, not repository endpoints.
+- A GitHub App **client secret**, password, or OAuth client secret.
+
+A GitHub App **installation access token** (`ghs_…`) also works with the relay, but GitHub expires those tokens after one hour, so a fine-grained PAT is more practical for a Render environment variable. The relay validates `GITHUB_TOKEN` at startup and rejects private keys, JWTs, and unrecognized values before contacting GitHub.
+
 ### Relay environment variables
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `GITHUB_TOKEN` | unset | GitHub API token. Strongly recommended. Required for private repositories. A fine-grained read-only token with repository Contents/Releases access is enough. |
+| `GITHUB_TOKEN` | unset | GitHub API token. Strongly recommended. Required for private repositories. Use a fine-grained personal access token with read-only Contents access. Never use a GitHub App private key or JWT. |
 | `CATALOG_PATH` | `server/catalog.json` | Alternate catalog file path. |
 | `PUBLIC_BASE_URL` | request origin | Public relay base used to build private-asset download URLs. Set this when behind a custom domain/proxy. |
 | `CACHE_TTL_SECONDS` | `300` | How long resolved GitHub releases stay cached in memory. |
@@ -244,7 +263,7 @@ On startup the launcher repairs interrupted updates, restores a previous `app/` 
 - Downloads are limited to GitHub hosts and the configured relay. Checksums are verified when available. Archive paths and install/manifest paths are checked against traversal.
 - The launcher executes programs from release assets. Treat write access to the catalog repositories and the relay as code-execution trust.
 - **The relay has no user authentication yet.** Its catalog endpoints are public. If you give the relay a token that can read private repositories, anyone who discovers the relay URL can list those products and request their assets through `/api/download`. Keep the deployed catalog public-only until SSO/profiles/entitlements exist, or put the relay behind your own access control.
-- GitHub tokens stay on the relay and are never sent to the launcher.
+- GitHub tokens stay on the relay and are never sent to the launcher. Relay errors are scrubbed so a credential is not echoed back to clients or written to logs. Never store a GitHub App private key in `GITHUB_TOKEN`; if a credential is exposed, revoke or rotate it immediately.
 - Release notes and metadata are rendered as text, not HTML.
 
 ## Current limitations and next steps
@@ -287,6 +306,8 @@ It opens a hidden window, checks that the preload bridge exists and the React UI
 ## Troubleshooting
 
 - **"The relay is not answering"** — confirm the Render service is awake and the URL in Settings is exactly the service URL, with no trailing path. Free instances can take up to a minute to wake.
+- **"The relay's GITHUB_TOKEN is not usable..."** — the relay rejected the credential before contacting GitHub. Usually `GITHUB_TOKEN` holds a GitHub App private key, an App JWT, or a malformed value. Replace it with a fine-grained personal access token as described in [GitHub token for private repositories](#github-token-for-private-repositories). Rotate any private key that was pasted into the variable.
+- **"GitHub rejected the configured GITHUB_TOKEN"** — the token is expired, revoked, or lacks access to the repository. Generate a fresh fine-grained token with Contents read access and update the Render environment variable.
 - **"Repository not found, or it is private..."** — set `GITHUB_TOKEN` on the relay. For public repositories, also confirm `repo` is `owner/name` and the release is published (not a draft).
 - **"No installable build"** — attach a `.zip`, `.tar.gz`, `.tgz`, portable `.exe` (Windows), or `.AppImage` (Linux); adjust the platform `asset` glob. If the release is a prerelease, set `includePrereleases: true`.
 - **"No runnable executable was found"** — set `platforms.<os>.executable` to the path inside the archive and republish.

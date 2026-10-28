@@ -58,36 +58,137 @@ class GitHubError extends Error {
 
 const snapshotCache = new Map<string, RepoSnapshot & { expiresAt: number }>()
 
-function token(): string | undefined {
-  const value = process.env.GITHUB_TOKEN?.trim()
-  return value || undefined
+const TOKEN_PREFIXES = [
+  'github_pat_',
+  'ghp_',
+  'ghs_',
+  'ghu_',
+  'gho_',
+  'ghr_'
+] as const
+
+const PRIVATE_KEY_MARKER = /-----BEGIN [A-Z ]*PRIVATE KEY-----/
+const JWT_PATTERN = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/
+
+interface TokenState {
+  value: string | null
+  problem: string | null
+}
+
+function stripTokenWrapper(raw: string): string {
+  let value = raw.trim()
+  if (value.length >= 2) {
+    const first = value[0]
+    const last = value[value.length - 1]
+    if (
+      (first === '"' && last === '"') ||
+      (first === "'" && last === "'") ||
+      (first === '`' && last === '`')
+    ) {
+      value = value.slice(1, -1).trim()
+    }
+  }
+  // Dashboard UIs sometimes leave the auth scheme in the value.
+  return value.replace(/^(?:bearer|token)\s+/i, '').trim()
+}
+
+/**
+ * Reads GITHUB_TOKEN and rejects credentials GitHub cannot use in a Bearer
+ * header. Never include the credential itself in a returned message: these
+ * errors are shown to launcher clients and written to relay logs.
+ */
+function readToken(): TokenState {
+  const raw = process.env.GITHUB_TOKEN
+  if (!raw || !raw.trim()) {
+    return { value: null, problem: null }
+  }
+
+  const unwrapped = stripTokenWrapper(raw)
+  const compact = unwrapped.replace(/\s+/g, '')
+
+  if (PRIVATE_KEY_MARKER.test(unwrapped) || /^MII[A-Za-z0-9+/=]{40,}/.test(compact)) {
+    return {
+      value: null,
+      problem:
+        'GITHUB_TOKEN contains a GitHub App private key, not an access token. A private key cannot be used as an API token. Create a fine-grained personal access token with read-only Contents access instead.'
+    }
+  }
+
+  if (JWT_PATTERN.test(compact)) {
+    return {
+      value: null,
+      problem:
+        'GITHUB_TOKEN contains a GitHub App JWT, which cannot authorize repository requests. Create a fine-grained personal access token with read-only Contents access instead.'
+    }
+  }
+
+  if (compact.length < 20) {
+    return {
+      value: null,
+      problem: 'GITHUB_TOKEN is too short to be a GitHub access token.'
+    }
+  }
+
+  if (!/^[\x21-\x7E]+$/.test(compact)) {
+    return {
+      value: null,
+      problem:
+        'GITHUB_TOKEN contains non-ASCII characters that cannot be sent in an HTTP header. Copy the token directly from GitHub; do not retype it or use smart quotes.'
+    }
+  }
+
+  if (!TOKEN_PREFIXES.some((prefix) => compact.startsWith(prefix))) {
+    return {
+      value: null,
+      problem:
+        'GITHUB_TOKEN does not look like a GitHub access token. Use a fine-grained personal access token (starts with github_pat_) or a classic token (starts with ghp_) with access to the repository.'
+    }
+  }
+
+  return { value: compact, problem: null }
 }
 
 export function hasGitHubToken(): boolean {
-  return Boolean(token())
+  return readToken().value !== null
+}
+
+/** Safe for logs and health responses; never contains the credential. */
+export function getGitHubTokenProblem(): string | null {
+  return readToken().problem
+}
+
+function redact(message: string, token: string | null): string {
+  if (!token) return message
+  return message.split(token).join('[redacted]')
 }
 
 function authHeaders(): Record<string, string> {
+  const state = readToken()
+  if (state.problem) {
+    throw new GitHubError(`The relay's GITHUB_TOKEN is not usable. ${state.problem}`, 500)
+  }
+
   const headers: Record<string, string> = {
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
     'User-Agent': USER_AGENT
   }
-  const value = token()
-  if (value) headers.Authorization = `Bearer ${value}`
+  if (state.value) headers.Authorization = `Bearer ${state.value}`
   return headers
 }
 
 async function request<T>(path: string): Promise<T> {
+  const state = readToken()
+  const headers = authHeaders()
   let response: Response
   try {
     response = await fetch(`${API_BASE}${path}`, {
-      headers: authHeaders(),
+      headers,
       signal: AbortSignal.timeout(15_000)
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    throw new GitHubError(`Could not reach GitHub: ${message}`, 0)
+    throw new GitHubError(`Could not reach GitHub: ${redact(message, state.value)}`, 0)
   }
 
   if (!response.ok) {
@@ -146,19 +247,21 @@ export async function openAssetStream(
   assetId: number,
   signal: AbortSignal
 ): Promise<Response> {
+  const state = readToken()
+  const headers = {
+    ...authHeaders(),
+    Accept: 'application/octet-stream'
+  }
   let response: Response
   try {
     response = await fetch(`${API_BASE}/repos/${repo}/releases/assets/${assetId}`, {
-      headers: {
-        ...authHeaders(),
-        Accept: 'application/octet-stream'
-      },
+      headers,
       redirect: 'follow',
       signal
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    throw new GitHubError(`Could not reach GitHub: ${message}`, 0)
+    throw new GitHubError(`Could not reach GitHub: ${redact(message, state.value)}`, 0)
   }
 
   if (!response.ok) {

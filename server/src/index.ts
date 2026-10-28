@@ -7,7 +7,7 @@ import cors from 'cors'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import type { CatalogResponse, HealthResponse, Platform } from '../../shared/types'
 import { loadCatalog, PLATFORMS, type Catalog, type CatalogProduct } from './catalog'
-import { hasGitHubToken, openAssetStream } from './github'
+import { getGitHubTokenProblem, hasGitHubToken, openAssetStream } from './github'
 import { resolveProduct } from './resolver'
 
 const packageJson = JSON.parse(
@@ -217,9 +217,18 @@ app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
 
 const port = Number(process.env.PORT ?? 8790)
 const server = app.listen(port, '0.0.0.0', () => {
+  const tokenProblem = getGitHubTokenProblem()
+  const tokenStatus = tokenProblem
+    ? 'INVALID'
+    : hasGitHubToken()
+      ? 'configured'
+      : 'NOT configured'
   console.info(
-    `MCM98 relay v${VERSION} listening on :${port} — ${catalog.products.length} product(s), GitHub token ${hasGitHubToken() ? 'configured' : 'NOT configured'}`
+    `MCM98 relay v${VERSION} listening on :${port} — ${catalog.products.length} product(s), GitHub token ${tokenStatus}`
   )
+  if (tokenProblem) {
+    console.warn(`[github] GITHUB_TOKEN is unusable. ${tokenProblem}`)
+  }
   if (catalog.products.length === 0) {
     console.warn(`Catalog ${catalog.sourcePath} is empty. Add products before shipping the launcher.`)
   }
