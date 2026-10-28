@@ -136,6 +136,9 @@ export interface LauncherUpdateInfo {
 /* Desktop-only contracts                                              */
 /* ------------------------------------------------------------------ */
 
+export type LauncherLayout = 'compact' | 'full'
+export type LaunchView = 'library' | 'catalog' | 'downloads'
+
 export interface LauncherConfig {
   /** Base URL of the Render relay, without a trailing slash. */
   backendUrl: string
@@ -143,6 +146,22 @@ export interface LauncherConfig {
   installRoot: string
   /** Selected appearance theme. */
   theme: ThemeId
+  /** Window density: the compact Paradox-style shell or the full layout. */
+  layout: LauncherLayout
+  /** View shown the next time the launcher opens. */
+  startView: LaunchView
+  /** Play the MCM98 boot animation on launch. */
+  showSplash: boolean
+  /** Interface motion: transitions, hover lifts, and the animated splash. */
+  animations: boolean
+  /** Start the launcher when the user signs in to this computer. */
+  launchAtLogin: boolean
+  /** Check the launcher's own GitHub releases automatically. */
+  autoCheckLauncher: boolean
+  /** Refresh the catalog (and product update state) automatically. */
+  autoCheckProducts: boolean
+  /** Ask before uninstalling a product. */
+  confirmUninstall: boolean
 }
 
 export interface AppInfo {

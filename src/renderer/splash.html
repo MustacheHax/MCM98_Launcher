@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; object-src 'none'; base-uri 'self'"
+    />
+    <meta name="color-scheme" content="dark" />
+    <title>MCM98 Launcher</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: #05060a;
+      }
+
+      body {
+        -webkit-app-region: drag;
+        user-select: none;
+        cursor: default;
+      }
+
+      .splash {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        opacity: 0;
+        transition: opacity 0.36s ease;
+      }
+
+      .splash.is-visible {
+        opacity: 1;
+      }
+
+      .splash.is-closing {
+        opacity: 0;
+        transition-duration: 0.3s;
+      }
+
+      .poster,
+      video {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .poster {
+        background: #05060a url("./splash.jpg") center / cover no-repeat;
+      }
+
+      video {
+        z-index: 1;
+        background: transparent;
+      }
+
+      .vignette {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        pointer-events: none;
+        background:
+          radial-gradient(120% 90% at 50% 45%, transparent 55%, rgba(4, 5, 8, 0.55) 100%),
+          linear-gradient(0deg, rgba(4, 5, 8, 0.6) 0%, transparent 26%);
+      }
+
+      .boot-line {
+        position: absolute;
+        z-index: 3;
+        left: 50%;
+        bottom: 26px;
+        width: 148px;
+        height: 2px;
+        overflow: hidden;
+        border-radius: 999px;
+        transform: translateX(-50%);
+        background: rgba(255, 255, 255, 0.16);
+      }
+
+      .boot-line::after {
+        content: "";
+        display: block;
+        width: 42%;
+        height: 100%;
+        border-radius: inherit;
+        background: #ffffff;
+        opacity: 0.85;
+        animation: bootSweep 1.25s ease-in-out infinite;
+      }
+
+      @keyframes bootSweep {
+        0% {
+          transform: translateX(-110%);
+        }
+        100% {
+          transform: translateX(360%);
+        }
+      }
+
+      .still .boot-line::after {
+        animation-duration: 1.8s;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="splash" id="splash">
+      <div class="poster" aria-hidden="true"></div>
+      <video
+        id="splash-video"
+        src="./splash.mp4"
+        poster="./splash.jpg"
+        autoplay
+        muted
+        playsinline
+        preload="auto"
+        aria-label="MCM98"
+      ></video>
+      <div class="vignette" aria-hidden="true"></div>
+      <div class="boot-line" aria-hidden="true"></div>
+    </div>
+    <script>
+      ;(() => {
+        const splash = document.getElementById('splash')
+        const video = document.getElementById('splash-video')
+        // The launcher controls motion from its own saved setting; the OS
+        // preference is not used here so the animated splash still plays when
+        // interface animations are enabled.
+        const still = new URLSearchParams(window.location.search).get('still') === '1'
+
+        let finished = false
+        let timer = 0
+
+        const finish = () => {
+          if (finished) return
+          finished = true
+          window.clearTimeout(timer)
+          splash.classList.add('is-closing')
+          window.setTimeout(() => window.close(), 320)
+        }
+
+        const arm = (ms) => {
+          window.clearTimeout(timer)
+          timer = window.setTimeout(finish, ms)
+        }
+
+        document.addEventListener('click', finish)
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape' || event.key === 'Enter' || event.key === ' ') finish()
+        })
+
+        if (still) {
+          document.body.classList.add('still')
+          video.removeAttribute('autoplay')
+          video.remove()
+          arm(1500)
+        } else {
+          video.addEventListener('ended', finish)
+          video.addEventListener('loadedmetadata', () => {
+            const duration = Number.isFinite(video.duration) ? video.duration : 3
+            arm(Math.min(6_000, Math.max(1_800, duration * 1_000)))
+          })
+          video.addEventListener('error', () => {
+            video.style.display = 'none'
+            arm(1_400)
+          })
+          arm(5_000)
+          const play = video.play()
+          if (play && typeof play.catch === 'function') {
+            play.catch(() => {
+              video.style.display = 'none'
+              arm(1_600)
+            })
+          }
+        }
+
+        // Let the compositor paint the poster before fading the artwork in.
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => splash.classList.add('is-visible'))
+        })
+
+        // A hidden or stalled window must never trap the launcher on the splash.
+        window.setTimeout(() => {
+          if (!finished) window.close()
+        }, 7_000)
+      })()
+    </script>
+  </body>
+</html>

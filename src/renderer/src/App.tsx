@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { DEFAULT_THEME, isThemeId, themeMode, type ThemeId } from '@shared/themes'
 import type {
   AppInfo,
@@ -66,6 +66,20 @@ function App(): JSX.Element {
       return DEFAULT_THEME
     }
   })
+  const [layout, setLayoutState] = useState<LauncherConfig['layout']>(() => {
+    try {
+      return window.localStorage.getItem('mcm98.layout') === 'full' ? 'full' : 'compact'
+    } catch {
+      return 'compact'
+    }
+  })
+  const [animations, setAnimationsState] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem('mcm98.animations') !== 'off'
+    } catch {
+      return true
+    }
+  })
 
   useEffect(() => {
     const mode = themeMode(theme)
@@ -82,6 +96,39 @@ function App(): JSX.Element {
   useEffect(() => {
     if (config?.theme) setThemeState(config.theme)
   }, [config?.theme])
+
+  useEffect(() => {
+    if (config) setLayoutState(config.layout)
+  }, [config?.layout])
+
+  useEffect(() => {
+    if (config) setAnimationsState(config.animations)
+  }, [config?.animations])
+
+  useEffect(() => {
+    document.documentElement.dataset.layout = layout
+    try {
+      window.localStorage.setItem('mcm98.layout', layout)
+    } catch {
+      // The saved config still wins when storage is unavailable.
+    }
+  }, [layout])
+
+  useEffect(() => {
+    document.documentElement.dataset.motion = animations ? 'full' : 'reduced'
+    try {
+      window.localStorage.setItem('mcm98.animations', animations ? 'on' : 'off')
+    } catch {
+      // The saved config still wins when storage is unavailable.
+    }
+  }, [animations])
+
+  const startViewApplied = useRef(false)
+  useLayoutEffect(() => {
+    if (!config || startViewApplied.current) return
+    startViewApplied.current = true
+    setView(config.startView)
+  }, [config])
 
   const toastTimer = useRef<number | null>(null)
   const previousPhases = useRef<Map<string, InstallPhase>>(new Map())
@@ -169,6 +216,23 @@ function App(): JSX.Element {
     if (!backendUrl) return
     void loadCatalog()
   }, [backendUrl, loadCatalog])
+
+  // Keep product update state warm without hammering a sleeping free relay.
+  useEffect(() => {
+    if (!bridge || !config?.autoCheckProducts) return
+    let lastRefresh = Date.now()
+    const refreshIfStale = (): void => {
+      if (Date.now() - lastRefresh < 5 * 60_000) return
+      lastRefresh = Date.now()
+      void loadCatalog()
+    }
+    const interval = window.setInterval(refreshIfStale, 30 * 60_000)
+    window.addEventListener('focus', refreshIfStale)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', refreshIfStale)
+    }
+  }, [bridge, config?.autoCheckProducts, loadCatalog])
 
   useEffect(() => {
     let completed: InstallTask | null = null
@@ -310,11 +374,11 @@ function App(): JSX.Element {
     [bridge, theme, toast]
   )
 
+  const launcherUpdateKey = launcherUpdate?.latestVersion ?? launcherUpdate?.releaseName ?? null
+
   const dismissLauncherUpdate = useCallback((): void => {
-    if (launcherUpdate?.latestVersion) {
-      setDismissedUpdateVersion(launcherUpdate.latestVersion)
-    }
-  }, [launcherUpdate?.latestVersion])
+    if (launcherUpdateKey) setDismissedUpdateVersion(launcherUpdateKey)
+  }, [launcherUpdateKey])
 
   const saveSettings = useCallback(
     async (patch: Partial<LauncherConfig>): Promise<void> => {
@@ -351,22 +415,39 @@ function App(): JSX.Element {
     }
   }, [bridge, toast])
 
-  const confirmUninstall = useCallback(async (): Promise<void> => {
-    if (!bridge || !confirmProduct) return
-    const product = confirmProduct
-    setUninstalling(true)
-    try {
-      await bridge.uninstall(product.id)
-      setConfirmProduct(null)
-      setSelected(null)
-      await refreshLibrary()
-      toast(`${product.name} was uninstalled.`, 'success')
-    } catch (error) {
-      toast(errorMessage(error), 'error')
-    } finally {
-      setUninstalling(false)
-    }
-  }, [bridge, confirmProduct, refreshLibrary, toast])
+  const uninstallProduct = useCallback(
+    async (product: InstalledProduct): Promise<void> => {
+      if (!bridge) return
+      setUninstalling(true)
+      try {
+        await bridge.uninstall(product.id)
+        setConfirmProduct(null)
+        setSelected(null)
+        await refreshLibrary()
+        toast(`${product.name} was uninstalled.`, 'success')
+      } catch (error) {
+        toast(errorMessage(error), 'error')
+      } finally {
+        setUninstalling(false)
+      }
+    },
+    [bridge, refreshLibrary, toast]
+  )
+
+  const confirmUninstall = useCallback((): void => {
+    if (confirmProduct) void uninstallProduct(confirmProduct)
+  }, [confirmProduct, uninstallProduct])
+
+  const requestUninstall = useCallback(
+    (product: InstalledProduct): void => {
+      if (config?.confirmUninstall === false) {
+        void uninstallProduct(product)
+        return
+      }
+      setConfirmProduct(product)
+    },
+    [config?.confirmUninstall, uninstallProduct]
+  )
 
   const navigate = useCallback((next: View): void => {
     setView(next)
@@ -404,7 +485,7 @@ function App(): JSX.Element {
       openExternal,
       install,
       launch,
-      requestUninstall: (product: InstalledProduct) => setConfirmProduct(product),
+      requestUninstall,
       openFolder,
       openDataFolder,
       saveSettings,
@@ -439,6 +520,7 @@ function App(): JSX.Element {
       openExternal,
       install,
       launch,
+      requestUninstall,
       openFolder,
       openDataFolder,
       saveSettings,
@@ -454,14 +536,20 @@ function App(): JSX.Element {
 
   return (
     <AppContext.Provider value={contextValue}>
-      <div className="app" data-platform={appInfo.platform} data-demo={demoMode ? 'true' : 'false'}>
+      <div
+        className="app"
+        data-platform={appInfo.platform}
+        data-demo={demoMode ? 'true' : 'false'}
+        data-layout={layout}
+        data-motion={animations ? 'full' : 'reduced'}
+      >
         <TitleBar />
         <div className="app-body">
           <Sidebar />
           <main className="main" id="main-content">
             {launcherUpdate?.state === 'available' &&
-              launcherUpdate.latestVersion &&
-              launcherUpdate.latestVersion !== dismissedUpdateVersion && (
+              launcherUpdateKey &&
+              launcherUpdateKey !== dismissedUpdateVersion && (
                 <div className="update-banner-slot">
                   <LauncherUpdateBanner
                     update={launcherUpdate}
@@ -487,7 +575,7 @@ function App(): JSX.Element {
             onCancel={() => {
               if (!uninstalling) setConfirmProduct(null)
             }}
-            onConfirm={() => void confirmUninstall()}
+            onConfirm={confirmUninstall}
           />
         )}
 
@@ -500,8 +588,7 @@ function App(): JSX.Element {
 function BootScreen({ error }: { error: string | null }): JSX.Element {
   return (
     <div className="boot-screen">
-      <div className="boot-mark">M</div>
-      <div className="boot-wordmark">MCM98</div>
+      <img className="boot-logo" src="./logo.png" alt="MCM98" />
       {error ? (
         <>
           <p className="boot-error">{error}</p>

@@ -12,12 +12,27 @@ export function versionLabel(version: string): string {
   return `v${normalizeVersion(version)}`
 }
 
+/**
+ * Extracts the first semantic version embedded in arbitrary text, such as a
+ * release name ("Launcher98 V0.3") or an asset name
+ * ("MCM98.Launcher-0.3.0-win-x64.exe"). Returns null when none is present.
+ */
+export function versionFromText(value: string | null | undefined): string | null {
+  if (!value) return null
+  const match = value.match(/(?:^|[^0-9.])v?(\d+\.\d+(?:\.\d+)?(?:-\d[A-Za-z0-9.-]*)?)/i)
+  return match?.[1] ? normalizeVersion(match[1]) : null
+}
+
+export function isVersionLike(value: string | null | undefined): boolean {
+  return typeof value === 'string' && parseVersion(value) !== null
+}
+
 interface ParsedVersion {
   main: number[]
   pre: string | null
 }
 
-function parseVersion(version: string): ParsedVersion | null {
+export function parseVersion(version: string): ParsedVersion | null {
   const normalized = normalizeVersion(version)
   const match = normalized.match(
     /^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-([0-9A-Za-z.-]+))?(?:\+.*)?$/

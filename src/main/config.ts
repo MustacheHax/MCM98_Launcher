@@ -8,16 +8,39 @@ import {
 } from 'node:fs'
 import { join, parse, resolve } from 'node:path'
 import { DEFAULT_THEME, isThemeId } from '@shared/themes'
-import type { LauncherConfig } from '@shared/types'
+import type { LaunchView, LauncherConfig, LauncherLayout } from '@shared/types'
 import type { Logger } from './logger'
 
 const DEFAULT_BACKEND =
   (import.meta.env.MAIN_VITE_BACKEND_URL ?? '').trim() || 'http://localhost:8790'
 
+const LAYOUTS: LauncherLayout[] = ['compact', 'full']
+const START_VIEWS: LaunchView[] = ['library', 'catalog', 'downloads']
+
+export function isLauncherLayout(value: unknown): value is LauncherLayout {
+  return typeof value === 'string' && LAYOUTS.includes(value as LauncherLayout)
+}
+
+export function isLaunchView(value: unknown): value is LaunchView {
+  return typeof value === 'string' && START_VIEWS.includes(value as LaunchView)
+}
+
 interface StoredConfig {
   backendUrl?: unknown
   installRoot?: unknown
   theme?: unknown
+  layout?: unknown
+  startView?: unknown
+  showSplash?: unknown
+  animations?: unknown
+  launchAtLogin?: unknown
+  autoCheckLauncher?: unknown
+  autoCheckProducts?: unknown
+  confirmUninstall?: unknown
+}
+
+function storedBoolean(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback
 }
 
 export class ConfigStore {
@@ -34,7 +57,15 @@ export class ConfigStore {
     const defaults: LauncherConfig = {
       backendUrl: normalizeBackendUrl(DEFAULT_BACKEND),
       installRoot: join(this.dataRoot, 'Library'),
-      theme: DEFAULT_THEME
+      theme: DEFAULT_THEME,
+      layout: 'compact',
+      startView: 'library',
+      showSplash: true,
+      animations: true,
+      launchAtLogin: false,
+      autoCheckLauncher: true,
+      autoCheckProducts: true,
+      confirmUninstall: true
     }
     this.current = this.load(defaults)
   }
@@ -55,7 +86,15 @@ export class ConfigStore {
       const config: LauncherConfig = {
         backendUrl: backendUrl ?? defaults.backendUrl,
         installRoot: installRoot ?? defaults.installRoot,
-        theme
+        theme,
+        layout: isLauncherLayout(stored.layout) ? stored.layout : defaults.layout,
+        startView: isLaunchView(stored.startView) ? stored.startView : defaults.startView,
+        showSplash: storedBoolean(stored.showSplash, defaults.showSplash),
+        animations: storedBoolean(stored.animations, defaults.animations),
+        launchAtLogin: storedBoolean(stored.launchAtLogin, defaults.launchAtLogin),
+        autoCheckLauncher: storedBoolean(stored.autoCheckLauncher, defaults.autoCheckLauncher),
+        autoCheckProducts: storedBoolean(stored.autoCheckProducts, defaults.autoCheckProducts),
+        confirmUninstall: storedBoolean(stored.confirmUninstall, defaults.confirmUninstall)
       }
       if (!backendUrl || !installRoot || (stored.theme !== undefined && !isThemeId(stored.theme))) {
         this.log.warn('Some saved launcher settings were invalid; defaults were applied.')
@@ -86,7 +125,29 @@ export class ConfigStore {
         patch.installRoot === undefined
           ? this.current.installRoot
           : normalizeInstallRoot(patch.installRoot),
-      theme: isThemeId(patch.theme) ? patch.theme : this.current.theme
+      theme: isThemeId(patch.theme) ? patch.theme : this.current.theme,
+      layout: isLauncherLayout(patch.layout) ? patch.layout : this.current.layout,
+      startView: isLaunchView(patch.startView) ? patch.startView : this.current.startView,
+      showSplash:
+        typeof patch.showSplash === 'boolean' ? patch.showSplash : this.current.showSplash,
+      animations:
+        typeof patch.animations === 'boolean' ? patch.animations : this.current.animations,
+      launchAtLogin:
+        typeof patch.launchAtLogin === 'boolean'
+          ? patch.launchAtLogin
+          : this.current.launchAtLogin,
+      autoCheckLauncher:
+        typeof patch.autoCheckLauncher === 'boolean'
+          ? patch.autoCheckLauncher
+          : this.current.autoCheckLauncher,
+      autoCheckProducts:
+        typeof patch.autoCheckProducts === 'boolean'
+          ? patch.autoCheckProducts
+          : this.current.autoCheckProducts,
+      confirmUninstall:
+        typeof patch.confirmUninstall === 'boolean'
+          ? patch.confirmUninstall
+          : this.current.confirmUninstall
     }
 
     mkdirSync(next.installRoot, { recursive: true })
@@ -98,7 +159,8 @@ export class ConfigStore {
     this.log.info('Launcher settings updated.', {
       backendUrl: next.backendUrl,
       installRoot: next.installRoot,
-      theme: next.theme
+      theme: next.theme,
+      layout: next.layout
     })
     return this.get()
   }

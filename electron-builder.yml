@@ -12,6 +12,7 @@ asar: true
 compression: normal
 artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 win:
+  icon: build/icon.png
   target:
     - target: nsis
       arch:
@@ -27,11 +28,13 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: MCM98 Launcher
 mac:
+  icon: build/icon.png
   category: public.app-category.games
   target:
     - dmg
     - zip
 linux:
+  icon: build/icon.png
   category: Game
   target:
     - AppImage

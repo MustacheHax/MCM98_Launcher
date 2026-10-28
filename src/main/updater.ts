@@ -10,7 +10,7 @@ import type {
   LauncherUpdateState,
   Platform
 } from '@shared/types'
-import { isUpdateAvailable } from '@shared/version'
+import { isUpdateAvailable, isVersionLike, normalizeVersion, versionFromText } from '@shared/version'
 import { extractArchive } from './archive'
 import type { ConfigStore } from './config'
 import { detectExecutable } from './detect'
@@ -72,6 +72,18 @@ function shQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`
 }
 
+function quoteWindowsArgument(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`
+}
+
+/** Builds a command line escaped for a VBScript string literal. */
+function vbsCommandLine(command: string, args: string[]): string {
+  return [command, ...args]
+    .map(quoteWindowsArgument)
+    .join(' ')
+    .replace(/"/g, '""')
+}
+
 /**
  * Checks the launcher's own GitHub releases through the relay, and applies a
  * downloaded update in place. Applying an update hands the replacement work to
@@ -100,13 +112,28 @@ export class LauncherUpdater {
     return { ...this.info, progress: { ...this.info.progress } }
   }
 
-  start(): void {
-    if (this.interval) return
-    void this.check()
-    this.interval = setInterval(() => {
+  /** Enables or disables the automatic release poll without touching a
+   * download that is already in flight. Manual checks always remain available. */
+  setAutoCheck(enabled: boolean): void {
+    if (enabled) {
+      if (!this.interval) {
+        this.interval = setInterval(() => {
+          void this.check()
+        }, CHECK_INTERVAL_MS)
+        this.interval.unref()
+      }
       void this.check()
-    }, CHECK_INTERVAL_MS)
-    this.interval.unref()
+      return
+    }
+
+    if (this.interval) {
+      clearInterval(this.interval)
+      this.interval = null
+    }
+  }
+
+  start(): void {
+    this.setAutoCheck(true)
   }
 
   stop(): void {
@@ -254,21 +281,43 @@ export class LauncherUpdater {
         })
       }
 
-      const available = isUpdateAvailable(currentVersion, release.version)
+      // Relays can be older than this app, and some releases use a rolling tag
+      // such as "newest". Derive a comparable version from the release title or
+      // asset name rather than treating the tag itself as a version.
+      const releaseVersion = isVersionLike(release.version)
+        ? normalizeVersion(release.version)
+        : (versionFromText(release.name) ?? versionFromText(release.assetName))
+
+      if (!releaseVersion) {
+        this.log.warn(
+          `Launcher release ${release.tag} has no comparable version; skipping the update check.`
+        )
+        return this.patch({
+          state: 'unavailable',
+          currentVersion,
+          latestVersion: null,
+          ...releaseFields(release),
+          checkedAt: new Date().toISOString(),
+          error:
+            'The newest launcher release does not include a version number. Publish a release titled or packaged with a version such as 0.3.0.'
+        })
+      }
+
+      const available = isUpdateAvailable(currentVersion, releaseVersion)
       const state: LauncherUpdateState = available ? 'available' : 'current'
-      const sameRelease = this.info.latestVersion === release.version
+      const sameRelease = this.info.latestVersion === releaseVersion
       const progress = sameRelease ? this.info.progress : idleProgress()
 
       if (!sameRelease) this.downloadedPath = null
 
       this.log.info(
-        `Launcher update check: current ${currentVersion}, latest ${release.version} (${state}).`
+        `Launcher update check: current ${currentVersion}, latest ${releaseVersion} (${state}).`
       )
 
       return this.patch({
         state,
         currentVersion,
-        latestVersion: release.version,
+        latestVersion: releaseVersion,
         ...releaseFields(release),
         checkedAt: new Date().toISOString(),
         error: null,
@@ -447,54 +496,60 @@ export class LauncherUpdater {
     const staging = join(this.config.dataRoot, 'updates', `staging-${Date.now()}`)
     await ensureDir(staging)
 
-    await extractArchive(filePath, staging, assetName, {
-      signal: new AbortController().signal,
-      logger: this.log,
-      onEntry: () => undefined
-    })
+    try {
+      await extractArchive(filePath, staging, assetName, {
+        signal: new AbortController().signal,
+        logger: this.log,
+        onEntry: () => undefined
+      })
 
-    const detection = await detectExecutable(
-      staging,
-      'win32',
-      app.getName(),
-      null,
-      this.log
-    )
-    if (!detection.executable) {
+      const detection = await detectExecutable(
+        staging,
+        'win32',
+        app.getName(),
+        null,
+        this.log
+      )
+      if (!detection.executable) {
+        throw new Error('The downloaded archive does not contain a launchable launcher build.')
+      }
+
+      const sourceRoot = dirname(join(staging, detection.executable))
+      const targetRoot = dirname(process.execPath)
+      const targetExe = join(targetRoot, basename(process.execPath))
+
+      const scriptPath = await this.writeHelperScript(
+        'replace.ps1',
+        [
+          `$ErrorActionPreference = 'SilentlyContinue'`,
+          `try { Wait-Process -Id ${process.pid} -Timeout 45 } catch {}`,
+          `Start-Sleep -Milliseconds 1200`,
+          `robocopy ${psQuote(sourceRoot)} ${psQuote(targetRoot)} /E /IS /IT /R:3 /W:1 /NFL /NDL /NJH /NJS /NC /NS | Out-Null`,
+          `Start-Sleep -Milliseconds 900`,
+          `Remove-Item -LiteralPath ${psQuote(staging)} -Recurse -Force`,
+          `if (Test-Path ${psQuote(targetExe)}) { Start-Process -FilePath ${psQuote(targetExe)} }`
+        ].join('\r\n')
+      )
+
+      await this.spawnDetached(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-WindowStyle',
+          'Hidden',
+          '-File',
+          scriptPath
+        ],
+        this.config.dataRoot
+      )
+    } catch (error) {
+      // The helper deletes staging after a successful copy. A failure before
+      // it starts must not leave a full extracted build behind.
       await removePath(staging).catch(() => undefined)
-      throw new Error('The downloaded archive does not contain a launchable launcher build.')
+      throw error
     }
-
-    const sourceRoot = dirname(join(staging, detection.executable))
-    const targetRoot = dirname(process.execPath)
-    const targetExe = join(targetRoot, basename(process.execPath))
-
-    const scriptPath = await this.writeHelperScript(
-      'replace.ps1',
-      [
-        `$ErrorActionPreference = 'SilentlyContinue'`,
-        `try { Wait-Process -Id ${process.pid} -Timeout 45 } catch {}`,
-        `Start-Sleep -Milliseconds 1200`,
-        `robocopy ${psQuote(sourceRoot)} ${psQuote(targetRoot)} /E /IS /IT /R:3 /W:1 /NFL /NDL /NJH /NJS /NC /NS | Out-Null`,
-        `Start-Sleep -Milliseconds 900`,
-        `Remove-Item -LiteralPath ${psQuote(staging)} -Recurse -Force`,
-        `if (Test-Path ${psQuote(targetExe)}) { Start-Process -FilePath ${psQuote(targetExe)} }`
-      ].join('\r\n')
-    )
-
-    await this.spawnDetached(
-      'powershell.exe',
-      [
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-WindowStyle',
-        'Hidden',
-        '-File',
-        scriptPath
-      ],
-      this.config.dataRoot
-    )
   }
 
   private async replaceLinuxAppImage(filePath: string): Promise<void> {
@@ -519,34 +574,38 @@ export class LauncherUpdater {
     const staging = join(this.config.dataRoot, 'updates', `staging-${Date.now()}`)
     await ensureDir(staging)
 
-    await extractArchive(filePath, staging, assetName, {
-      signal: new AbortController().signal,
-      logger: this.log,
-      onEntry: () => undefined
-    })
+    try {
+      await extractArchive(filePath, staging, assetName, {
+        signal: new AbortController().signal,
+        logger: this.log,
+        onEntry: () => undefined
+      })
 
-    const detection = await detectExecutable(staging, 'linux', app.getName(), null, this.log)
-    if (!detection.executable) {
+      const detection = await detectExecutable(staging, 'linux', app.getName(), null, this.log)
+      if (!detection.executable) {
+        throw new Error('The downloaded archive does not contain a launchable launcher build.')
+      }
+
+      const sourceRoot = dirname(join(staging, detection.executable))
+      const targetRoot = dirname(process.execPath)
+      const targetExe = join(targetRoot, basename(process.execPath))
+      const scriptPath = await this.writeHelperScript(
+        'replace.sh',
+        [
+          '#!/bin/sh',
+          `while kill -0 ${process.pid} 2>/dev/null; do sleep 0.3; done`,
+          `cp -a ${shQuote(`${sourceRoot}/.`)} ${shQuote(targetRoot)}/`,
+          `chmod +x ${shQuote(targetExe)}`,
+          `rm -rf ${shQuote(staging)}`,
+          `"${targetExe}" >/dev/null 2>&1 &`
+        ].join('\n')
+      )
+
+      await this.spawnDetached('sh', [scriptPath], this.config.dataRoot)
+    } catch (error) {
       await removePath(staging).catch(() => undefined)
-      throw new Error('The downloaded archive does not contain a launchable launcher build.')
+      throw error
     }
-
-    const sourceRoot = dirname(join(staging, detection.executable))
-    const targetRoot = dirname(process.execPath)
-    const targetExe = join(targetRoot, basename(process.execPath))
-    const scriptPath = await this.writeHelperScript(
-      'replace.sh',
-      [
-        '#!/bin/sh',
-        `while kill -0 ${process.pid} 2>/dev/null; do sleep 0.3; done`,
-        `cp -a ${shQuote(`${sourceRoot}/.`)} ${shQuote(targetRoot)}/`,
-        `chmod +x ${shQuote(targetExe)}`,
-        `rm -rf ${shQuote(staging)}`,
-        `"${targetExe}" >/dev/null 2>&1 &`
-      ].join('\n')
-    )
-
-    await this.spawnDetached('sh', [scriptPath], this.config.dataRoot)
   }
 
   private async writeHelperScript(name: string, contents: string): Promise<string> {
@@ -558,23 +617,60 @@ export class LauncherUpdater {
     return scriptPath
   }
 
+  /**
+   * Starts a helper that has to outlive this process. On Windows a detached
+   * console child dies with the launcher and `detached: true` stops PowerShell
+   * from running the script at all, so wscript launches the command hidden
+   * instead. Other platforms only need a detached spawn.
+   */
   private async spawnDetached(
     command: string,
     args: string[],
     cwd: string
   ): Promise<void> {
+    if (this.platform === 'win32') {
+      await this.spawnWindowsDetached(command, args, cwd)
+      return
+    }
+
     await new Promise<void>((resolve, reject) => {
       const child = spawn(command, args, {
         cwd,
         detached: true,
-        stdio: 'ignore',
-        windowsHide: true
+        stdio: 'ignore'
       })
       child.once('spawn', () => {
         child.unref()
         resolve()
       })
       child.once('error', reject)
+    })
+  }
+
+  private async spawnWindowsDetached(
+    command: string,
+    args: string[],
+    cwd: string
+  ): Promise<void> {
+    const scriptPath = await this.writeHelperScript(
+      'run.vbs',
+      [
+        'Set sh = CreateObject("WScript.Shell")',
+        `sh.Run "${vbsCommandLine(command, args)}", 0, False`
+      ].join('\r\n')
+    )
+
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn('wscript.exe', ['//nologo', '//B', scriptPath], {
+        cwd,
+        stdio: 'ignore',
+        windowsHide: true
+      })
+      child.once('error', reject)
+      child.once('exit', (code) => {
+        if (code === 0) resolve()
+        else reject(new Error(`The update helper could not be started (wscript exit ${code}).`))
+      })
     })
   }
 

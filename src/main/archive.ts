@@ -12,6 +12,26 @@ const S_IFMT = 0o170000
 const S_IFLNK = 0o120000
 const MAX_SYMLINK_BYTES = 4096
 
+/**
+ * Electron's asar layer rejects writes to any path ending in `.asar`, which
+ * breaks extracting a build that ships its own `resources/app.asar` — most
+ * importantly, a launcher updating itself to a newer launcher build. ASAR
+ * support is disabled for the duration of the extraction and restored after.
+ */
+let asarSuspended = 0
+
+async function withoutAsar<T>(run: () => Promise<T>): Promise<T> {
+  const previous = process.noAsar
+  asarSuspended += 1
+  process.noAsar = true
+  try {
+    return await run()
+  } finally {
+    asarSuspended -= 1
+    if (asarSuspended === 0) process.noAsar = previous
+  }
+}
+
 export interface ExtractOptions {
   signal: AbortSignal
   logger: Logger
@@ -248,11 +268,13 @@ export async function extractArchive(
   const kind = await detectKind(file, archiveName)
   options.logger.info(`Extracting ${archiveName} (${kind}) to ${destination}`)
 
-  if (kind === 'zip') {
-    await extractZip(file, destination, options)
-  } else {
-    await extractTar(file, destination, options)
-  }
+  await withoutAsar(async () => {
+    if (kind === 'zip') {
+      await extractZip(file, destination, options)
+    } else {
+      await extractTar(file, destination, options)
+    }
+  })
 
   if (options.signal.aborted) throw new AbortError()
 }

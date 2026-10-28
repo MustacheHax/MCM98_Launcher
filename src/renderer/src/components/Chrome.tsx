@@ -1,6 +1,6 @@
 import { Icon, type IconName } from './Icons'
 import { useApp, type View } from '../state'
-import { isTerminalPhase } from '../utils'
+import { isTerminalPhase, launcherReleaseLabel } from '../utils'
 
 const NAV_ITEMS: Array<{ view: View; label: string; icon: IconName }> = [
   { view: 'library', label: 'Library', icon: 'library' },
@@ -23,16 +23,13 @@ export function TitleBar(): JSX.Element {
   return (
     <header className="titlebar">
       <div className="titlebar-brand">
-        <span className="mark" aria-hidden="true">
-          M
-        </span>
-        <span className="brand-word">MCM98</span>
+        <img className="brand-logo" src="./logo.png" alt="MCM98" />
         <span className="brand-divider" aria-hidden="true" />
         <span className="brand-sub">Launcher</span>
       </div>
       <div className="titlebar-right">
         {demoMode && <span className="demo-pill">Demo data</span>}
-        <span className="titlebar-version">v{appInfo?.version ?? '0.2.0'}</span>
+        <span className="titlebar-version">v{appInfo?.version ?? '0.3.0'}</span>
       </div>
     </header>
   )
@@ -104,14 +101,19 @@ export function Sidebar(): JSX.Element {
 
       <div className="sidebar-spacer" />
 
-      {launcherUpdate?.state === 'available' && launcherUpdate.latestVersion && (
+      {launcherUpdate?.state === 'available' && (
         <button
           className="sidebar-update"
           onClick={() => navigate('settings')}
-          title={`Launcher update v${launcherUpdate.latestVersion} is available`}
+          title={`Launcher update ${launcherReleaseLabel(
+            launcherUpdate.latestVersion,
+            launcherUpdate.releaseName
+          )} is available`}
         >
           <span className="sidebar-update-dot" />
-          <span>Launcher v{launcherUpdate.latestVersion}</span>
+          <span>
+            Launcher {launcherReleaseLabel(launcherUpdate.latestVersion, launcherUpdate.releaseName)}
+          </span>
           <Icon name="chevronRight" size={13} />
         </button>
       )}
@@ -135,7 +137,7 @@ export function Sidebar(): JSX.Element {
 
       <div className="sidebar-foot">
         <span>MCM98 Launcher</span>
-        <span className="mono">v{appInfo?.version ?? '0.2.0'}</span>
+        <span className="mono">v{appInfo?.version ?? '0.3.0'}</span>
       </div>
     </aside>
   )

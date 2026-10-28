@@ -1,6 +1,32 @@
-import type { InstallPhase, InstallTask, InstalledProduct, Platform, ProductEntry } from '@shared/types'
+import { isVersionLike, versionLabel } from '@shared/version'
+import type {
+  InstallPhase,
+  InstallTask,
+  InstalledProduct,
+  Platform,
+  ProductEntry
+} from '@shared/types'
 
-export { compareVersions, isUpdateAvailable, normalizeVersion, versionLabel } from '@shared/version'
+export {
+  compareVersions,
+  isUpdateAvailable,
+  isVersionLike,
+  normalizeVersion,
+  versionLabel
+} from '@shared/version'
+
+/**
+ * A human label for a launcher release. Release tags are free-form, so when the
+ * version is not semantic we fall back to the release title instead of showing
+ * something like "vnewest".
+ */
+export function launcherReleaseLabel(
+  latestVersion: string | null,
+  releaseName: string | null
+): string {
+  if (latestVersion && isVersionLike(latestVersion)) return versionLabel(latestVersion)
+  return releaseName?.trim() || 'new build'
+}
 
 export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'

@@ -1,5 +1,5 @@
 import type { LauncherUpdateInfo } from '@shared/types'
-import { formatBytes, formatDate, formatSpeed } from '../utils'
+import { formatBytes, formatDate, formatSpeed, isVersionLike, launcherReleaseLabel } from '../utils'
 import { Icon } from './Icons'
 
 interface LauncherUpdateBannerProps {
@@ -15,7 +15,12 @@ export function LauncherUpdateBanner({
   onDownload,
   onInstall
 }: LauncherUpdateBannerProps): JSX.Element {
-  const latest = update.latestVersion ? `v${update.latestVersion}` : 'A new build'
+  const latest = launcherReleaseLabel(update.latestVersion, update.releaseName)
+  const titled = isVersionLike(update.latestVersion)
+    ? `Launcher ${latest} is available`
+    : update.releaseName
+      ? `${latest} is available`
+      : 'A new launcher build is available'
   const progress = update.progress
   const percent =
     progress.totalBytes > 0
@@ -51,7 +56,7 @@ export function LauncherUpdateBanner({
       </span>
       <div className="update-banner-copy">
         <div className="update-banner-title">
-          <strong>Launcher {latest} is available</strong>
+          <strong>{titled}</strong>
           <span className="update-banner-badge">Update</span>
         </div>
         <p>{detail}</p>

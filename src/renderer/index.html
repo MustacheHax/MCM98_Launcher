@@ -29,11 +29,18 @@
           document.documentElement.style.colorScheme =
             savedTheme.indexOf('-light') !== -1 ? 'light' : 'dark'
         }
+        var savedLayout = localStorage.getItem('mcm98.layout')
+        if (savedLayout === 'full' || savedLayout === 'compact') {
+          document.documentElement.dataset.layout = savedLayout
+        }
+        if (localStorage.getItem('mcm98.animations') === 'off') {
+          document.documentElement.dataset.motion = 'reduced'
+        }
       } catch (error) {
         /* Storage can be unavailable; the in-app theme still applies. */
       }
     </script>
-    <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+    <link rel="icon" type="image/png" href="./app-icon.png" />
   </head>
   <body>
     <div id="root"></div>

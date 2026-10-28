@@ -4,6 +4,7 @@ import {
   dialog,
   ipcMain,
   Menu,
+  screen,
   shell,
   type OpenDialogOptions
 } from 'electron'
@@ -18,10 +19,17 @@ import type {
   InstallTask,
   InstalledProduct,
   LauncherConfig,
+  LauncherLayout,
   LauncherUpdateInfo,
   Platform
 } from '@shared/types'
-import { ConfigStore, normalizeBackendUrl, normalizeInstallRoot } from './config'
+import {
+  ConfigStore,
+  isLauncherLayout,
+  isLaunchView,
+  normalizeBackendUrl,
+  normalizeInstallRoot
+} from './config'
 import { productDirectory } from './library'
 import { InstallManager } from './installer'
 import { LaunchService } from './launch'
@@ -36,6 +44,9 @@ const SUPPORTED_PLATFORMS: Platform[] = ['win32', 'linux', 'darwin']
 const smokeTest = process.argv.includes('--smoke-test')
 
 let mainWindow: BrowserWindow | null = null
+let splashWindow: BrowserWindow | null = null
+let mainReadyToShow = false
+let splashSettled = false
 let logger: Logger
 let config: ConfigStore
 let library: LibraryService
@@ -59,6 +70,7 @@ function broadcast(channel: string, payload?: unknown): void {
 function focusMainWindow(): void {
   if (!mainWindow) return
   if (mainWindow.isMinimized()) mainWindow.restore()
+  if (splashWindow && !splashSettled) return
   mainWindow.show()
   mainWindow.focus()
 }
@@ -91,6 +103,125 @@ async function safeOpenExternal(value: string): Promise<void> {
   await shell.openExternal(url.toString())
 }
 
+const WINDOW_SIZES: Record<
+  LauncherLayout,
+  { width: number; height: number; minWidth: number; minHeight: number }
+> = {
+  compact: { width: 1080, height: 700, minWidth: 940, minHeight: 620 },
+  full: { width: 1340, height: 860, minWidth: 1040, minHeight: 680 }
+}
+
+function appIconPath(): string | undefined {
+  const candidate = join(__dirname, '../../build/icon.png')
+  return existsSync(candidate) ? candidate : undefined
+}
+
+/** Keeps the compact and full shells at their intended window sizes. */
+function applyWindowLayout(target: BrowserWindow, layout: LauncherLayout): void {
+  const size = WINDOW_SIZES[layout]
+  target.setMinimumSize(size.minWidth, size.minHeight)
+  if (target.isMaximized() || target.isFullScreen() || target.isMinimized()) return
+
+  const area = screen.getDisplayMatching(target.getBounds()).workArea
+  const width = Math.min(size.width, area.width)
+  const height = Math.min(size.height, area.height)
+  const bounds = target.getBounds()
+  const x = Math.min(Math.max(bounds.x, area.x), Math.max(area.x, area.x + area.width - width))
+  const y = Math.min(Math.max(bounds.y, area.y), Math.max(area.y, area.y + area.height - height))
+
+  if (bounds.width !== width || bounds.height !== height) {
+    target.setBounds({ x, y, width, height })
+  }
+}
+
+function applyLoginItem(enabled: boolean): void {
+  // Registering a development build would point the OS at an ephemeral
+  // electron.exe path, so only installed builds participate.
+  if (!app.isPackaged) return
+  try {
+    app.setLoginItemSettings({ openAtLogin: enabled })
+  } catch (error) {
+    logger?.warn('Could not update the sign-in launch setting.', error)
+  }
+}
+
+function revealMainWindow(): void {
+  if (!mainWindow || !mainReadyToShow) return
+  if (splashWindow && !splashSettled) return
+  if (!smokeTest) mainWindow.show()
+}
+
+async function createSplashWindow(): Promise<void> {
+  if (smokeTest || !config.get().showSplash) {
+    splashSettled = true
+    return
+  }
+
+  splashSettled = false
+  const window = new BrowserWindow({
+    width: 820,
+    height: 462,
+    frame: false,
+    show: false,
+    center: true,
+    resizable: false,
+    movable: true,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    backgroundColor: '#05060a',
+    title: 'MCM98 Launcher',
+    ...(appIconPath() ? { icon: appIconPath() } : {}),
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      spellcheck: false
+    }
+  })
+  splashWindow = window
+  logger.info('Showing the boot splash.')
+
+  window.once('ready-to-show', () => window.show())
+  window.once('closed', () => {
+    splashSettled = true
+    if (splashWindow === window) splashWindow = null
+    logger.info('Boot splash closed.')
+    revealMainWindow()
+  })
+
+  const fallback = setTimeout(() => {
+    if (!window.isDestroyed()) window.close()
+  }, 7_000)
+  window.once('closed', () => clearTimeout(fallback))
+
+  window.webContents.once(
+    'did-fail-load',
+    (_event, errorCode, errorDescription, _url, isMainFrame) => {
+      if (!isMainFrame) return
+      logger.warn(`Splash screen failed to load: ${errorCode} ${errorDescription}`)
+      if (!window.isDestroyed()) window.close()
+    }
+  )
+
+  try {
+    const query = config.get().animations ? '' : '?still=1'
+    const rendererUrl = process.env['ELECTRON_RENDERER_URL']
+    if (rendererUrl) {
+      await window.loadURL(`${rendererUrl.replace(/\/$/, '')}/splash.html${query}`)
+    } else {
+      await window.loadFile(join(__dirname, '../renderer/splash.html'), {
+        search: query ? query.slice(1) : undefined
+      })
+    }
+  } catch (error) {
+    logger.warn('Could not show the splash screen.', error)
+    if (!window.isDestroyed()) window.close()
+  }
+}
+
 function registerIpc(): void {
   ipcMain.handle(IPC.getConfig, (): LauncherConfig => config.get())
 
@@ -102,6 +233,20 @@ function registerIpc(): void {
       if (typeof input?.backendUrl === 'string') patch.backendUrl = input.backendUrl
       if (typeof input?.installRoot === 'string') patch.installRoot = input.installRoot
       if (isThemeId(input?.theme)) patch.theme = input.theme
+      if (isLauncherLayout(input?.layout)) patch.layout = input.layout
+      if (isLaunchView(input?.startView)) patch.startView = input.startView
+      if (typeof input?.showSplash === 'boolean') patch.showSplash = input.showSplash
+      if (typeof input?.animations === 'boolean') patch.animations = input.animations
+      if (typeof input?.launchAtLogin === 'boolean') patch.launchAtLogin = input.launchAtLogin
+      if (typeof input?.autoCheckLauncher === 'boolean') {
+        patch.autoCheckLauncher = input.autoCheckLauncher
+      }
+      if (typeof input?.autoCheckProducts === 'boolean') {
+        patch.autoCheckProducts = input.autoCheckProducts
+      }
+      if (typeof input?.confirmUninstall === 'boolean') {
+        patch.confirmUninstall = input.confirmUninstall
+      }
 
       if (
         patch.installRoot !== undefined &&
@@ -113,6 +258,9 @@ function registerIpc(): void {
 
       const saved = config.update(patch)
       if (patch.theme !== undefined) applyWindowTheme()
+      if (patch.layout !== undefined && mainWindow) applyWindowLayout(mainWindow, saved.layout)
+      if (patch.launchAtLogin !== undefined) applyLoginItem(saved.launchAtLogin)
+      if (patch.autoCheckLauncher !== undefined) updater.setAutoCheck(saved.autoCheckLauncher)
       if (saved.installRoot !== previousRoot) {
         await installer.recover()
         broadcast(IPC.libraryChanged)
@@ -234,14 +382,17 @@ async function createWindow(): Promise<void> {
   const isMac = process.platform === 'darwin'
 
   const darkShell = themeMode(config.get().theme) === 'dark'
+  const size = WINDOW_SIZES[config.get().layout]
+  mainReadyToShow = false
   const window = new BrowserWindow({
-    width: 1340,
-    height: 860,
-    minWidth: 1040,
-    minHeight: 680,
+    width: size.width,
+    height: size.height,
+    minWidth: size.minWidth,
+    minHeight: size.minHeight,
     show: false,
     title: 'MCM98 Launcher',
     backgroundColor: darkShell ? '#08090c' : '#f3f4ef',
+    ...(appIconPath() ? { icon: appIconPath() } : {}),
     autoHideMenuBar: !isMac,
     titleBarStyle: isWindows ? 'hidden' : isMac ? 'hiddenInset' : 'default',
     ...(isWindows
@@ -265,10 +416,13 @@ async function createWindow(): Promise<void> {
 
   window.on('closed', () => {
     mainWindow = null
+    mainReadyToShow = false
   })
 
   window.once('ready-to-show', () => {
-    if (!smokeTest) window.show()
+    mainReadyToShow = true
+    logger.info('Main window ready.')
+    revealMainWindow()
   })
 
   window.webContents.setWindowOpenHandler(({ url }) => {
@@ -377,13 +531,15 @@ async function bootstrap(): Promise<void> {
     broadcast(IPC.launcherUpdateChanged, info)
   })
   registerIpc()
+  applyLoginItem(config.get().launchAtLogin)
 
   if (!process.platform.startsWith('darwin')) {
     Menu.setApplicationMenu(null)
   }
 
+  await createSplashWindow()
   await createWindow()
-  updater.start()
+  updater.setAutoCheck(config.get().autoCheckLauncher)
   logger.info(`Install library: ${config.get().installRoot}`)
 }
 

@@ -3,6 +3,7 @@ import type {
   LauncherReleaseResponse,
   Platform
 } from '../../shared/types'
+import { versionFromText } from '../../shared/version'
 import {
   getRepoSnapshot,
   type GitHubAsset,
@@ -42,9 +43,19 @@ export function launcherRepo(): string {
   return configured && REPO_PATTERN.test(configured) ? configured : DEFAULT_LAUNCHER_REPO
 }
 
-function versionFromTag(tag: string): string {
-  const match = tag.match(/(\d+\.\d+(?:\.\d+)?(?:-[0-9A-Za-z.-]+)?)/)
-  return (match?.[1] ?? tag.replace(/^v/i, '')).trim()
+/**
+ * Release tags are free-form on GitHub, so a tag like "newest" cannot be
+ * compared with an installed version. Prefer the tag when it contains a real
+ * version, then fall back to the asset name and release title. Launcher
+ * releases use a rolling tag, so this keeps update checks meaningful.
+ */
+function versionFromRelease(release: GitHubRelease, asset: GitHubAsset | null): string {
+  return (
+    versionFromText(release.tag_name) ??
+    versionFromText(asset?.name) ??
+    versionFromText(release.name) ??
+    'unknown'
+  )
 }
 
 function selectLauncherAsset(
@@ -65,7 +76,7 @@ function toReleaseInfo(
   downloadUrl: string
 ): LauncherReleaseInfo {
   return {
-    version: versionFromTag(release.tag_name),
+    version: versionFromRelease(release, asset),
     tag: release.tag_name,
     name: release.name?.trim() || release.tag_name,
     publishedAt: release.published_at,

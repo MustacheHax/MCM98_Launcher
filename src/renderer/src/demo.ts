@@ -207,7 +207,15 @@ export function createDemoApi(): LauncherApi {
   let config: LauncherConfig = {
     backendUrl: 'https://mcm98-launcher-api.onrender.com',
     installRoot: DEMO_LIBRARY_ROOT,
-    theme: 'modern-dark'
+    theme: 'modern-dark',
+    layout: 'compact',
+    startView: 'library',
+    showSplash: true,
+    animations: true,
+    launchAtLogin: false,
+    autoCheckLauncher: true,
+    autoCheckProducts: true,
+    confirmUninstall: true
   }
   let installed = seedLibrary()
   let sequence = 0
@@ -222,16 +230,16 @@ export function createDemoApi(): LauncherApi {
   const timers = new Map<string, { interval: number | null; timeouts: number[] }>()
   let launcherUpdate: LauncherUpdateInfo = {
     state: 'available',
-    currentVersion: '0.2.0',
-    latestVersion: '0.2.1',
-    releaseName: 'Launcher 0.2.1',
+    currentVersion: '0.3.0',
+    latestVersion: '0.3.1',
+    releaseName: 'Launcher 0.3.1',
     releaseUrl: 'https://github.com/MustacheHax/MCM98_Launcher/releases',
     publishedAt: '2026-10-27T18:00:00Z',
     notes: 'Launcher update preview for the browser demo.',
-    assetName: 'MCM98 Launcher-0.2.1-win-x64.exe',
+    assetName: 'MCM98 Launcher-0.3.1-win-x64.exe',
     assetSize: 121_000_000,
     assetDownloadUrl:
-      'https://github.com/MustacheHax/MCM98_Launcher/releases/download/v0.2.1/MCM98-Launcher-0.2.1-win-x64.exe',
+      'https://github.com/MustacheHax/MCM98_Launcher/releases/download/v0.3.1/MCM98-Launcher-0.3.1-win-x64.exe',
     assetDigest: null,
     checkedAt: new Date().toISOString(),
     error: null,
@@ -354,9 +362,18 @@ export function createDemoApi(): LauncherApi {
 
     async saveConfig(patch) {
       const next: LauncherConfig = {
+        ...config,
         backendUrl: patch.backendUrl?.trim() || config.backendUrl,
         installRoot: patch.installRoot?.trim() || config.installRoot,
-        theme: patch.theme ?? config.theme
+        theme: patch.theme ?? config.theme,
+        layout: patch.layout ?? config.layout,
+        startView: patch.startView ?? config.startView,
+        showSplash: patch.showSplash ?? config.showSplash,
+        animations: patch.animations ?? config.animations,
+        launchAtLogin: patch.launchAtLogin ?? config.launchAtLogin,
+        autoCheckLauncher: patch.autoCheckLauncher ?? config.autoCheckLauncher,
+        autoCheckProducts: patch.autoCheckProducts ?? config.autoCheckProducts,
+        confirmUninstall: patch.confirmUninstall ?? config.confirmUninstall
       }
       try {
         void new URL(next.backendUrl)
@@ -377,7 +394,7 @@ export function createDemoApi(): LauncherApi {
       await wait(700)
       const health: HealthResponse = {
         ok: true,
-        version: '0.2.0',
+        version: '0.3.0',
         timestamp: new Date().toISOString(),
         catalogProducts: buildCatalogProducts().length,
         githubAuthenticated: true
@@ -387,7 +404,7 @@ export function createDemoApi(): LauncherApi {
 
     async getAppInfo() {
       const info: AppInfo = {
-        version: '0.2.0',
+        version: '0.3.0',
         platform: 'win32',
         arch: 'x64',
         isPackaged: false,
@@ -401,7 +418,7 @@ export function createDemoApi(): LauncherApi {
     async fetchCatalog() {
       await wait(720)
       const response: CatalogResponse = {
-        backendVersion: '0.2.0',
+        backendVersion: '0.3.0',
         generatedAt: new Date().toISOString(),
         platform: 'win32',
         products: buildCatalogProducts()
