@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: mcm98-launcher-api
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.12.0
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: CACHE_TTL_SECONDS
+        value: "300"

@@ -1,0 +1,34 @@
+{
+  "products": [
+    {
+      "id": "hollow-signal",
+      "name": "Hollow Signal",
+      "repo": "MCM98/hollow-signal",
+      "summary": "A short survival-horror vignette set in a decommissioned radio array.",
+      "tags": ["game", "horror"],
+      "featured": true,
+      "platforms": {
+        "win32": {
+          "asset": "*win*.zip",
+          "executable": "HollowSignal.exe"
+        },
+        "linux": {
+          "asset": "*linux*.tar.gz",
+          "executable": "HollowSignal.x86_64"
+        }
+      }
+    },
+    {
+      "id": "foundry-tools",
+      "name": "Foundry Tools",
+      "repo": "MCM98/foundry-tools",
+      "summary": "Internal content pipeline utilities, packaged as a desktop app.",
+      "tags": ["tool"],
+      "platforms": {
+        "win32": {
+          "asset": "*windows*.zip"
+        }
+      }
+    }
+  ]
+}

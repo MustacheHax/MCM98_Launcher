@@ -1,0 +1,12 @@
+.freebuff/
+node_modules/
+out/
+release/
+dist/
+server/dist/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db

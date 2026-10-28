@@ -1,0 +1,37 @@
+appId: com.mcm98.launcher
+productName: MCM98 Launcher
+copyright: Copyright © 2026 MCM98
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+  - '!**/*.map'
+asar: true
+compression: normal
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: zip
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: MCM98 Launcher
+mac:
+  category: public.app-category.games
+  target:
+    - dmg
+    - zip
+linux:
+  category: Game
+  target:
+    - AppImage
