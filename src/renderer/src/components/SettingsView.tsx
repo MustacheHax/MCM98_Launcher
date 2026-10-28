@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react'
 import type { HealthResponse } from '@shared/types'
 import { errorMessage, getLauncher } from '../api'
 import { useApp } from '../state'
-import { formatBytes, formatDate, platformLabel } from '../utils'
+import { formatBytes, formatDate, formatSpeed, platformLabel } from '../utils'
 import { PageHeader } from './PageHeader'
 import { Icon } from './Icons'
+import { ThemePicker } from './ThemePicker'
 
 type TestState =
   | { status: 'idle' }
@@ -35,6 +36,8 @@ export function SettingsView(): JSX.Element {
     openDataFolder,
     launcherUpdate,
     checkLauncherUpdate,
+    downloadLauncherUpdate,
+    installLauncherUpdate,
     openExternal,
     toast,
     demoMode
@@ -55,6 +58,16 @@ export function SettingsView(): JSX.Element {
   const rootError = installRoot.trim() ? null : 'Choose an install folder.'
   const updateChecking = launcherUpdate?.state === 'checking'
   const updateAvailable = launcherUpdate?.state === 'available'
+  const updateProgress = launcherUpdate?.progress
+  const updatePercent =
+    updateProgress && updateProgress.totalBytes > 0
+      ? Math.min(100, Math.round((updateProgress.receivedBytes / updateProgress.totalBytes) * 100))
+      : 0
+  const updateBusy =
+    updateProgress?.phase === 'downloading' ||
+    updateProgress?.phase === 'verifying' ||
+    updateProgress?.phase === 'installing'
+  const updateReady = updateProgress?.phase === 'ready'
   const updateTone =
     launcherUpdate?.state === 'available'
       ? 'update'
@@ -69,6 +82,24 @@ export function SettingsView(): JSX.Element {
     if (!launcherUpdate || launcherUpdate.state === 'idle') return 'Not checked yet.'
     if (launcherUpdate.state === 'checking') return 'Checking GitHub releases…'
     if (launcherUpdate.state === 'available') {
+      if (updateProgress?.phase === 'downloading') {
+        const speed =
+          updateProgress.speedBytesPerSec > 0
+            ? ` · ${formatSpeed(updateProgress.speedBytesPerSec)}`
+            : ''
+        return `Downloading v${launcherUpdate.latestVersion} · ${updatePercent}%${speed}.`
+      }
+      if (updateProgress?.phase === 'verifying') return 'Verifying the downloaded update…'
+      if (updateProgress?.phase === 'ready') {
+        return `v${launcherUpdate.latestVersion} is downloaded. Restart the launcher to install it.`
+      }
+      if (updateProgress?.phase === 'installing') {
+        return 'Closing the launcher and applying the update…'
+      }
+      if (updateProgress?.phase === 'error' && updateProgress.error) {
+        return updateProgress.error
+      }
+
       const build = launcherUpdate.assetName
         ? `${launcherUpdate.assetName}${
             launcherUpdate.assetSize ? ` · ${formatBytes(launcherUpdate.assetSize)}` : ''
@@ -151,6 +182,22 @@ export function SettingsView(): JSX.Element {
 
       <div className="settings-layout">
         <div className="settings-main">
+          <section className="panel settings-panel appearance-panel">
+            <div className="panel-heading">
+              <span className="panel-icon">
+                <Icon name="palette" size={18} />
+              </span>
+              <div>
+                <h2>Appearance</h2>
+                <p>
+                  Ten complete themes, not just palettes. Typography, corners, borders, and
+                  textures change with each family. Your choice is saved to this machine.
+                </p>
+              </div>
+            </div>
+            <ThemePicker />
+          </section>
+
           <section className="panel settings-panel">
             <div className="panel-heading">
               <span className="panel-icon">
@@ -302,7 +349,7 @@ export function SettingsView(): JSX.Element {
             <dl className="about-grid">
               <div>
                 <dt>Version</dt>
-                <dd className="mono">v{appInfo?.version ?? '0.1.0'}</dd>
+                <dd className="mono">v{appInfo?.version ?? '0.2.0'}</dd>
               </div>
               <div>
                 <dt>Platform</dt>
@@ -322,25 +369,63 @@ export function SettingsView(): JSX.Element {
               <div className="launcher-update-head">
                 <span className={`status-dot ${updateTone}`} />
                 <span>Launcher update</span>
-                <span className="mono">v{appInfo?.version ?? '0.1.0'}</span>
+                <span className="mono">v{appInfo?.version ?? '0.2.0'}</span>
               </div>
               <p>{updateMessage}</p>
+              {updateAvailable && updateBusy && (
+                <div
+                  className={`progress ${updateProgress?.phase === 'verifying' ? 'indeterminate' : ''}`}
+                >
+                  <span
+                    style={{
+                      width: `${updateProgress?.phase === 'downloading' ? updatePercent : 100}%`
+                    }}
+                  />
+                </div>
+              )}
               <div className="test-row">
                 <button
                   className="btn btn-sm"
                   onClick={() => void checkLauncherUpdate()}
-                  disabled={updateChecking}
+                  disabled={updateChecking || updateBusy}
                 >
                   <Icon name="refresh" size={14} />
                   {updateChecking ? 'Checking…' : 'Check now'}
                 </button>
-                {updateAvailable && launcherUpdate?.releaseUrl && (
+                {updateAvailable && updateReady && (
                   <button
                     className="btn btn-primary btn-sm"
+                    onClick={() => void installLauncherUpdate()}
+                  >
+                    <Icon name="refresh" size={13} />
+                    Restart &amp; install
+                  </button>
+                )}
+                {updateAvailable && !updateReady && (
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => void downloadLauncherUpdate()}
+                    disabled={updateBusy}
+                  >
+                    <Icon name="download" size={13} />
+                    {updateProgress?.phase === 'downloading'
+                      ? `Downloading ${updatePercent}%`
+                      : updateProgress?.phase === 'verifying'
+                        ? 'Verifying…'
+                        : updateProgress?.phase === 'installing'
+                          ? 'Installing…'
+                          : updateProgress?.phase === 'error'
+                            ? 'Try again'
+                            : 'Download update'}
+                  </button>
+                )}
+                {updateAvailable && launcherUpdate?.releaseUrl && (
+                  <button
+                    className="btn btn-ghost btn-sm"
                     onClick={() => void openExternal(launcherUpdate.releaseUrl as string)}
                   >
-                    <Icon name="external" size={13} />
-                    View release
+                    Release notes
+                    <Icon name="external" size={12} />
                   </button>
                 )}
               </div>

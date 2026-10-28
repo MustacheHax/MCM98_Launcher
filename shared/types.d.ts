@@ -4,6 +4,8 @@
  * without a shared runtime package.
  */
 
+import type { ThemeId } from './themes'
+
 export type Platform = 'win32' | 'linux' | 'darwin'
 
 export type ProductStatus = 'ready' | 'unavailable'
@@ -75,6 +77,10 @@ export interface LauncherReleaseInfo {
   notes: string | null
   assetName: string | null
   assetSize: number | null
+  /** Relay (private) or direct GitHub URL for the launcher build. */
+  assetDownloadUrl: string | null
+  /** GitHub-provided digest, e.g. "sha256:ab12…". */
+  assetDigest: string | null
 }
 
 export interface LauncherReleaseResponse {
@@ -92,6 +98,23 @@ export type LauncherUpdateState =
   | 'unavailable'
   | 'error'
 
+export type LauncherUpdatePhase =
+  | 'idle'
+  | 'downloading'
+  | 'verifying'
+  | 'ready'
+  | 'installing'
+  | 'error'
+
+export interface LauncherUpdateProgress {
+  phase: LauncherUpdatePhase
+  receivedBytes: number
+  totalBytes: number
+  speedBytesPerSec: number
+  message: string | null
+  error: string | null
+}
+
 export interface LauncherUpdateInfo {
   state: LauncherUpdateState
   currentVersion: string
@@ -102,8 +125,11 @@ export interface LauncherUpdateInfo {
   notes: string | null
   assetName: string | null
   assetSize: number | null
+  assetDownloadUrl: string | null
+  assetDigest: string | null
   checkedAt: string | null
   error: string | null
+  progress: LauncherUpdateProgress
 }
 
 /* ------------------------------------------------------------------ */
@@ -115,6 +141,8 @@ export interface LauncherConfig {
   backendUrl: string
   /** Root folder where products are installed. */
   installRoot: string
+  /** Selected appearance theme. */
+  theme: ThemeId
 }
 
 export interface AppInfo {
@@ -193,6 +221,8 @@ export interface LauncherApi {
   fetchCatalog(): Promise<CatalogResponse>
   getLauncherUpdate(): Promise<LauncherUpdateInfo>
   checkLauncherUpdate(): Promise<LauncherUpdateInfo>
+  downloadLauncherUpdate(): Promise<LauncherUpdateInfo>
+  installLauncherUpdate(): Promise<void>
 
   listLibrary(): Promise<InstalledProduct[]>
   startInstall(request: InstallRequest): Promise<InstallTask>

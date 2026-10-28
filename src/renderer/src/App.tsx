@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { DEFAULT_THEME, isThemeId, themeMode, type ThemeId } from '@shared/themes'
 import type {
   AppInfo,
   CatalogResponse,
@@ -57,6 +58,30 @@ function App(): JSX.Element {
   const [uninstalling, setUninstalling] = useState(false)
   const [toastState, setToastState] = useState<ToastState | null>(null)
   const [bootError, setBootError] = useState<string | null>(boot.error)
+  const [theme, setThemeState] = useState<ThemeId>(() => {
+    try {
+      const cached = window.localStorage.getItem('mcm98.theme')
+      return isThemeId(cached) ? cached : DEFAULT_THEME
+    } catch {
+      return DEFAULT_THEME
+    }
+  })
+
+  useEffect(() => {
+    const mode = themeMode(theme)
+    document.documentElement.dataset.theme = theme
+    document.documentElement.dataset.mode = mode
+    document.documentElement.style.colorScheme = mode === 'light' ? 'light' : 'dark'
+    try {
+      window.localStorage.setItem('mcm98.theme', theme)
+    } catch {
+      // A locked-down profile can refuse storage; the saved config still wins.
+    }
+  }, [theme])
+
+  useEffect(() => {
+    if (config?.theme) setThemeState(config.theme)
+  }, [config?.theme])
 
   const toastTimer = useRef<number | null>(null)
   const previousPhases = useRef<Map<string, InstallPhase>>(new Map())
@@ -251,6 +276,40 @@ function App(): JSX.Element {
     }
   }, [bridge, toast])
 
+  const downloadLauncherUpdate = useCallback(async (): Promise<void> => {
+    if (!bridge) return
+    try {
+      setLauncherUpdate(await bridge.downloadLauncherUpdate())
+    } catch (error) {
+      toast(errorMessage(error), 'error')
+    }
+  }, [bridge, toast])
+
+  const installLauncherUpdate = useCallback(async (): Promise<void> => {
+    if (!bridge) return
+    try {
+      await bridge.installLauncherUpdate()
+    } catch (error) {
+      toast(errorMessage(error), 'error')
+    }
+  }, [bridge, toast])
+
+  const setTheme = useCallback(
+    async (next: ThemeId): Promise<void> => {
+      if (!bridge || next === theme) return
+      const previous = theme
+      setThemeState(next)
+      try {
+        const saved = await bridge.saveConfig({ theme: next })
+        setConfig(saved)
+      } catch (error) {
+        setThemeState(previous)
+        toast(errorMessage(error), 'error')
+      }
+    },
+    [bridge, theme, toast]
+  )
+
   const dismissLauncherUpdate = useCallback((): void => {
     if (launcherUpdate?.latestVersion) {
       setDismissedUpdateVersion(launcherUpdate.latestVersion)
@@ -326,6 +385,7 @@ function App(): JSX.Element {
       catalogError,
       launcherUpdate,
       dismissedUpdateVersion,
+      theme,
       library,
       tasks,
       running,
@@ -337,7 +397,10 @@ function App(): JSX.Element {
       refreshCatalog: loadCatalog,
       refreshLibrary,
       checkLauncherUpdate,
+      downloadLauncherUpdate,
+      installLauncherUpdate,
       dismissLauncherUpdate,
+      setTheme,
       openExternal,
       install,
       launch,
@@ -360,6 +423,7 @@ function App(): JSX.Element {
       catalogError,
       launcherUpdate,
       dismissedUpdateVersion,
+      theme,
       library,
       tasks,
       running,
@@ -368,7 +432,10 @@ function App(): JSX.Element {
       loadCatalog,
       refreshLibrary,
       checkLauncherUpdate,
+      downloadLauncherUpdate,
+      installLauncherUpdate,
       dismissLauncherUpdate,
+      setTheme,
       openExternal,
       install,
       launch,
@@ -399,9 +466,8 @@ function App(): JSX.Element {
                   <LauncherUpdateBanner
                     update={launcherUpdate}
                     onDismiss={dismissLauncherUpdate}
-                    onViewRelease={() => {
-                      if (launcherUpdate.releaseUrl) void openExternal(launcherUpdate.releaseUrl)
-                    }}
+                    onDownload={() => void downloadLauncherUpdate()}
+                    onInstall={() => void installLauncherUpdate()}
                   />
                 </div>
               )}

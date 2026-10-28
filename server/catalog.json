@@ -13,6 +13,28 @@
           "asset": "*WienerStream*.exe"
         }
       }
+    },
+    {
+      "id": "user-friendly",
+      "name": "UserFriendly",
+      "repo": "MustacheHax/UserFriendly",
+      "summary": "Clicker game based upon nostalgic computer experiences.",
+      "tags": ["game", "clicker"],
+      "includePrereleases": true,
+      "platforms": {
+        "win32": {}
+      }
+    },
+    {
+      "id": "puzzle-bud",
+      "name": "PuzzleBud",
+      "repo": "MustacheHax/PuzzleBud",
+      "summary": "Puzzling with the friendlist of friends.",
+      "tags": ["game", "puzzle"],
+      "includePrereleases": true,
+      "platforms": {
+        "win32": {}
+      }
     }
   ]
 }

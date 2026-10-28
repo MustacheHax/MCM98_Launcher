@@ -45,7 +45,7 @@ async function requestJson<T>(
     try {
       const response = await net.fetch(url, {
         signal: controller.signal,
-        headers: { Accept: 'application/json', 'User-Agent': 'MCM98-Launcher/0.1' }
+        headers: { Accept: 'application/json', 'User-Agent': 'MCM98-Launcher/0.2' }
       })
 
       if (!response.ok) {

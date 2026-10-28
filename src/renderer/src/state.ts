@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react'
+import type { ThemeId } from '@shared/themes'
 import type {
   AppInfo,
   CatalogResponse,
@@ -24,6 +25,7 @@ export interface AppContextValue {
   catalogError: string | null
   launcherUpdate: LauncherUpdateInfo | null
   dismissedUpdateVersion: string | null
+  theme: ThemeId
   library: InstalledProduct[]
   tasks: InstallTask[]
   running: string[]
@@ -35,7 +37,10 @@ export interface AppContextValue {
   refreshCatalog: () => Promise<void>
   refreshLibrary: () => Promise<void>
   checkLauncherUpdate: () => Promise<void>
+  downloadLauncherUpdate: () => Promise<void>
+  installLauncherUpdate: () => Promise<void>
   dismissLauncherUpdate: () => void
+  setTheme: (theme: ThemeId) => Promise<void>
   openExternal: (url: string) => Promise<void>
   install: (product: ProductEntry) => Promise<void>
   launch: (productId: string) => Promise<void>

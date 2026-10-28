@@ -9,6 +9,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
     <title>MCM98 Launcher</title>
+    <script>
+      try {
+        var savedTheme = localStorage.getItem('mcm98.theme')
+        var knownThemes = [
+          'modern-dark',
+          'modern-light',
+          'retro-dark',
+          'retro-light',
+          'bubbly-dark',
+          'bubbly-light',
+          'rocker-dark',
+          'rocker-light',
+          'ghost-dark',
+          'ghost-light'
+        ]
+        if (knownThemes.indexOf(savedTheme) !== -1) {
+          document.documentElement.dataset.theme = savedTheme
+          document.documentElement.style.colorScheme =
+            savedTheme.indexOf('-light') !== -1 ? 'light' : 'dark'
+        }
+      } catch (error) {
+        /* Storage can be unavailable; the in-app theme still applies. */
+      }
+    </script>
     <link rel="icon" type="image/svg+xml" href="./icon.svg" />
   </head>
   <body>

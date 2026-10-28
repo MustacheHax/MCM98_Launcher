@@ -12,9 +12,9 @@ GitHub Releases ──► Render relay ──► Electron launcher ──► loc
 
 ## What is included
 
-- **Desktop launcher** — Electron + React + TypeScript, custom dark UI, generated cover art, install/update/play/uninstall flows, download queue, settings, logs.
+- **Desktop launcher** — Electron + React + TypeScript, ten complete appearance themes, generated cover art, install/update/play/uninstall flows, download queue, settings, logs.
 - **Relay** — Express + TypeScript API suitable for Render. It reads a developer-owned catalog, resolves GitHub releases server-side, caches responses, and streams private release assets without exposing a GitHub token.
-- **Launcher update checks** — the relay resolves the launcher's own GitHub releases; the app shows an update prompt and opens the release page. Installing a launcher update is still a manual action.
+- **In-app launcher updates** — the relay resolves the launcher's own GitHub releases; the app downloads the installer through the relay, verifies its digest, replaces itself after quitting, and relaunches. **Release notes** remains available in Settings as a fallback.
 - **Shared contract** — one set of API/IPC types consumed by both sides.
 - **Render Blueprint** — `render.yaml` provisions the web service.
 - **Demo mode** — the renderer can run in a browser with sample data for UI work (`npm run dev:ui`).
@@ -80,6 +80,18 @@ npm run dev:ui
 ```
 
 Then open `http://localhost:5174`.
+
+## Themes
+
+**Settings → Appearance** switches between ten complete themes. Each family changes typography, corner geometry, surfaces, borders, and control treatment, not only its palette:
+
+- **Modern Dark / Light** — the original graphite-and-lime shell and a daylight counterpart.
+- **90s Retro Dark / Light** — scanlines, square beveled controls, terminal and desktop type.
+- **Bubbly Dark / Light** — rounded display type, pill controls, pastel gradients, oversized radii.
+- **Rocker Dark / Light** — condensed italic display type, clipped corners, stage-red accents.
+- **Ghost Dark / Light** — fog, translucent glass panels, hairline rules, serif display type.
+
+The theme id is stored in `config.json` and cached in local storage so the window paints the right colours immediately on the next launch. It is applied instantly; no restart is needed.
 
 ## Publishing a product
 
@@ -163,9 +175,11 @@ The launcher checks its own repository for stable GitHub Releases. By default th
    - Linux: an `.AppImage`, `.tar.gz`, or `.zip`
 4. Redeploy the relay if `LAUNCHER_REPO` changed. The launcher checks on startup, every six hours, and when **Check now** is clicked in Settings.
 
-The app compares the release tag with its own version and only prompts when the release is newer. It does not silently replace its own executable; **View release** opens the GitHub release so the installer can be downloaded and run explicitly. The published release must not be a prerelease or draft.
+The app compares the release tag with its own version and only prompts when the release is newer. **Update now** downloads the build through the relay, verifies GitHub's digest when present, and hands off to a small detached helper. The helper waits for the launcher to exit, runs the NSIS installer (or copies a portable zip / AppImage / archive into place), and relaunches the launcher. On macOS, the downloaded DMG or zip is opened in Finder and the user finishes the drag-install. The published release must not be a prerelease or draft.
 
-Until a stable launcher release exists, Settings shows that no launcher release has been published yet. That is expected.
+Until a 0.2.0 stable launcher release exists, Settings shows that no launcher release has been published yet. That is expected. The current app version is `0.2.0` (`v0.2.0` tag); an older installed build will detect it automatically.
+
+Self-installation arrived in 0.2.0. Install 0.2.0 manually once (run `release/MCM98 Launcher-0.2.0-win-x64.exe` after attaching it to the release); every later version can then update from inside the running launcher. A 0.1.0 build can only detect the release and open GitHub.
 
 ## Deploying the relay to Render
 
@@ -225,7 +239,8 @@ GitHub's unauthenticated API limit is 60 requests/hour per IP, which a catalog r
 | --- | --- |
 | `GET /api/health` | Service version, catalog size, and whether a GitHub token is configured. |
 | `GET /api/catalog?platform=win32` | Resolved catalog for `win32`, `linux`, or `darwin`. |
-| `GET /api/launcher?platform=win32` | Newest stable launcher release and matching installer asset for the platform. |
+| `GET /api/launcher?platform=win32` | Newest stable launcher release, matching installer asset, download URL, and digest. |
+| `GET /api/launcher/download?platform=win32` | Streams the launcher installer through the relay, or redirects to GitHub for public assets. |
 | `GET /api/download/:productId?platform=win32` | Streams a private asset through the relay, or redirects to GitHub for public assets. |
 
 The catalog response includes the latest release tag, release notes, asset name/size/digest, a platform-specific download URL, available platforms, and the configured executable hint.
@@ -288,7 +303,8 @@ On startup the launcher repairs interrupted updates, restores a previous `app/` 
 ## Current limitations and next steps
 
 - No accounts, profiles, SSO, game keys, or per-user entitlements yet.
-- Launcher update detection is included; installing a launcher update is still a manual download from the GitHub release. Silent self-replacement is not wired yet.
+- Windows/Linux launcher updates install in place after the app exits. macOS opens the downloaded DMG/zip in Finder instead of replacing the `.app` bundle automatically.
+- Launcher updates are unsigned, like product builds. Windows SmartScreen may still warn on the helper-run installer.
 - No resumable downloads, delta updates, or parallel chunking.
 - No 7z, DMG, or MSI installation. Supported formats are archives, portable Windows `.exe`, and Linux `.AppImage`.
 - No code signing on Windows or notarization on macOS. Users may see SmartScreen/Gatekeeper warnings; production distribution needs signing.
@@ -327,6 +343,8 @@ It opens a hidden window, checks that the preload bridge exists and the React UI
 - **"The relay is not answering"** — confirm the Render service is awake and the URL in Settings is exactly the service URL, with no trailing path. Free instances can take up to a minute to wake.
 - **"No launcher release has been published yet"** — publish a stable release in `LAUNCHER_REPO` with a Windows `.exe`/`.zip`, macOS `.dmg`/`.zip`, or Linux `.AppImage`/`.tar.gz` asset. Drafts and prereleases are ignored.
 - **Launcher update prompt does not appear** — confirm the release tag is newer than `package.json` and uses a semantic version such as `v0.2.0`; the release must have an asset for the current platform.
+- **Launcher update download or install fails** — the relay must be reachable and able to resolve `LAUNCHER_REPO`; the build must be an NSIS `.exe` or portable `.zip` on Windows, an AppImage or archive on Linux. On macOS the downloaded file is opened in Finder. In-app installation is disabled when running from source (`npm run dev`).
+- **A theme looks wrong after switching** — themes are applied instantly and saved in `config.json`. Switch back to **Modern Dark** in Settings → Appearance; the theme is also cached locally for the next start.
 - **"The relay's GITHUB_TOKEN is not usable..."** — the relay rejected the credential before contacting GitHub. Usually `GITHUB_TOKEN` holds a GitHub App private key, an App JWT, or a malformed value. Replace it with a fine-grained personal access token as described in [GitHub token for private repositories](#github-token-for-private-repositories). Rotate any private key that was pasted into the variable.
 - **"GitHub rejected the configured GITHUB_TOKEN"** — the token is expired, revoked, or lacks access to the repository. Generate a fresh fine-grained token with Contents read access and update the Render environment variable.
 - **"Repository not found, or it is private..."** — set `GITHUB_TOKEN` on the relay. For public repositories, also confirm `repo` is `owner/name` and the release is published (not a draft).

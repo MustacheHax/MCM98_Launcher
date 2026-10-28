@@ -10,6 +10,7 @@ import {
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { IPC } from '@shared/channels'
+import { isThemeId, themeMode } from '@shared/themes'
 import type {
   AppInfo,
   HealthResponse,
@@ -62,6 +63,21 @@ function focusMainWindow(): void {
   mainWindow.focus()
 }
 
+function applyWindowTheme(): void {
+  if (!mainWindow || process.platform !== 'win32') return
+  const dark = themeMode(config.get().theme) === 'dark'
+  mainWindow.setBackgroundColor(dark ? '#08090c' : '#f3f4ef')
+  try {
+    mainWindow.setTitleBarOverlay({
+      color: dark ? '#08090c' : '#f7f8f3',
+      symbolColor: dark ? '#9aa3b2' : '#485040',
+      height: 40
+    })
+  } catch {
+    // Older Windows builds may not support the overlay API.
+  }
+}
+
 async function safeOpenExternal(value: string): Promise<void> {
   let url: URL
   try {
@@ -85,6 +101,7 @@ function registerIpc(): void {
       const patch: Partial<LauncherConfig> = {}
       if (typeof input?.backendUrl === 'string') patch.backendUrl = input.backendUrl
       if (typeof input?.installRoot === 'string') patch.installRoot = input.installRoot
+      if (isThemeId(input?.theme)) patch.theme = input.theme
 
       if (
         patch.installRoot !== undefined &&
@@ -95,6 +112,7 @@ function registerIpc(): void {
       }
 
       const saved = config.update(patch)
+      if (patch.theme !== undefined) applyWindowTheme()
       if (saved.installRoot !== previousRoot) {
         await installer.recover()
         broadcast(IPC.libraryChanged)
@@ -144,6 +162,14 @@ function registerIpc(): void {
 
   ipcMain.handle(IPC.checkLauncherUpdate, (): Promise<LauncherUpdateInfo> => {
     return updater.check()
+  })
+
+  ipcMain.handle(IPC.downloadLauncherUpdate, (): Promise<LauncherUpdateInfo> => {
+    return updater.download()
+  })
+
+  ipcMain.handle(IPC.installLauncherUpdate, (): Promise<void> => {
+    return updater.install()
   })
 
   ipcMain.handle(IPC.listLibrary, (): Promise<InstalledProduct[]> => library.list())
@@ -207,6 +233,7 @@ async function createWindow(): Promise<void> {
   const isWindows = process.platform === 'win32'
   const isMac = process.platform === 'darwin'
 
+  const darkShell = themeMode(config.get().theme) === 'dark'
   const window = new BrowserWindow({
     width: 1340,
     height: 860,
@@ -214,14 +241,14 @@ async function createWindow(): Promise<void> {
     minHeight: 680,
     show: false,
     title: 'MCM98 Launcher',
-    backgroundColor: '#08090c',
+    backgroundColor: darkShell ? '#08090c' : '#f3f4ef',
     autoHideMenuBar: !isMac,
     titleBarStyle: isWindows ? 'hidden' : isMac ? 'hiddenInset' : 'default',
     ...(isWindows
       ? {
           titleBarOverlay: {
-            color: '#08090c',
-            symbolColor: '#9aa3b2',
+            color: darkShell ? '#08090c' : '#f7f8f3',
+            symbolColor: darkShell ? '#9aa3b2' : '#485040',
             height: 40
           }
         }

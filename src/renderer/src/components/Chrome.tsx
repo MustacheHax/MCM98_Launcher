@@ -32,7 +32,7 @@ export function TitleBar(): JSX.Element {
       </div>
       <div className="titlebar-right">
         {demoMode && <span className="demo-pill">Demo data</span>}
-        <span className="titlebar-version">v{appInfo?.version ?? '0.1.0'}</span>
+        <span className="titlebar-version">v{appInfo?.version ?? '0.2.0'}</span>
       </div>
     </header>
   )
@@ -135,7 +135,7 @@ export function Sidebar(): JSX.Element {
 
       <div className="sidebar-foot">
         <span>MCM98 Launcher</span>
-        <span className="mono">v{appInfo?.version ?? '0.1.0'}</span>
+        <span className="mono">v{appInfo?.version ?? '0.2.0'}</span>
       </div>
     </aside>
   )

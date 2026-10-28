@@ -3,7 +3,12 @@ import type {
   LauncherReleaseResponse,
   Platform
 } from '../../shared/types'
-import { getRepoSnapshot, type GitHubAsset, type GitHubRelease } from './github'
+import {
+  getRepoSnapshot,
+  type GitHubAsset,
+  type GitHubRelease,
+  type GitHubRepo
+} from './github'
 
 const DEFAULT_LAUNCHER_REPO = 'MustacheHax/MCM98_Launcher'
 const REPO_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
@@ -56,7 +61,8 @@ function selectLauncherAsset(
 
 function toReleaseInfo(
   release: GitHubRelease,
-  asset: GitHubAsset
+  asset: GitHubAsset,
+  downloadUrl: string
 ): LauncherReleaseInfo {
   return {
     version: versionFromTag(release.tag_name),
@@ -67,26 +73,37 @@ function toReleaseInfo(
     url: release.html_url,
     notes: release.body ? release.body.slice(0, 20_000) : null,
     assetName: asset.name,
-    assetSize: asset.size
+    assetSize: asset.size,
+    assetDownloadUrl: downloadUrl,
+    assetDigest: asset.digest ?? null
   }
 }
 
+export interface LauncherAssetResolution {
+  repo: string
+  repoInfo: GitHubRepo | null
+  release: GitHubRelease | null
+  asset: GitHubAsset | null
+  error: string | null
+}
+
 /**
- * Resolves the newest stable release of the launcher itself. This deliberately
- * uses the same GitHub release source as products, but is kept separate from
- * the product catalog so the launcher never appears as an installable game.
+ * Resolves the newest stable release of the launcher itself, including the raw
+ * asset the download endpoint needs. Kept separate from the product catalog so
+ * the launcher never appears as an installable game.
  */
-export async function resolveLauncherRelease(
+export async function resolveLauncherAsset(
   platform: Platform
-): Promise<LauncherReleaseResponse> {
+): Promise<LauncherAssetResolution> {
   const repo = launcherRepo()
   const snapshot = await getRepoSnapshot(repo, false)
 
   if (!snapshot.release) {
     return {
-      platform,
       repo,
+      repoInfo: snapshot.repo,
       release: null,
+      asset: null,
       error:
         snapshot.repoError ??
         snapshot.releaseError ??
@@ -97,17 +114,45 @@ export async function resolveLauncherRelease(
   const asset = selectLauncherAsset(snapshot.release, platform)
   if (!asset) {
     return {
-      platform,
       repo,
-      release: null,
+      repoInfo: snapshot.repo,
+      release: snapshot.release,
+      asset: null,
       error: `The latest launcher release (${snapshot.release.tag_name}) has no ${PLATFORM_LABEL[platform]} build.`
     }
   }
 
   return {
-    platform,
     repo,
-    release: toReleaseInfo(snapshot.release, asset),
+    repoInfo: snapshot.repo,
+    release: snapshot.release,
+    asset,
+    error: null
+  }
+}
+
+export async function resolveLauncherRelease(
+  platform: Platform,
+  baseUrl: string
+): Promise<LauncherReleaseResponse> {
+  const resolved = await resolveLauncherAsset(platform)
+
+  if (!resolved.release || !resolved.asset) {
+    return {
+      platform,
+      repo: resolved.repo,
+      release: null,
+      error: resolved.error
+    }
+  }
+
+  const downloadUrl = new URL('/api/launcher/download', baseUrl)
+  downloadUrl.searchParams.set('platform', platform)
+
+  return {
+    platform,
+    repo: resolved.repo,
+    release: toReleaseInfo(resolved.release, resolved.asset, downloadUrl.toString()),
     error: null
   }
 }

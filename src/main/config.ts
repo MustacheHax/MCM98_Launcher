@@ -7,6 +7,7 @@ import {
   writeFileSync
 } from 'node:fs'
 import { join, parse, resolve } from 'node:path'
+import { DEFAULT_THEME, isThemeId } from '@shared/themes'
 import type { LauncherConfig } from '@shared/types'
 import type { Logger } from './logger'
 
@@ -16,6 +17,7 @@ const DEFAULT_BACKEND =
 interface StoredConfig {
   backendUrl?: unknown
   installRoot?: unknown
+  theme?: unknown
 }
 
 export class ConfigStore {
@@ -31,7 +33,8 @@ export class ConfigStore {
 
     const defaults: LauncherConfig = {
       backendUrl: normalizeBackendUrl(DEFAULT_BACKEND),
-      installRoot: join(this.dataRoot, 'Library')
+      installRoot: join(this.dataRoot, 'Library'),
+      theme: DEFAULT_THEME
     }
     this.current = this.load(defaults)
   }
@@ -47,12 +50,14 @@ export class ConfigStore {
           : null
       const installRoot =
         typeof stored.installRoot === 'string' ? tryNormalizeInstallRoot(stored.installRoot) : null
+      const theme = isThemeId(stored.theme) ? stored.theme : defaults.theme
 
       const config: LauncherConfig = {
         backendUrl: backendUrl ?? defaults.backendUrl,
-        installRoot: installRoot ?? defaults.installRoot
+        installRoot: installRoot ?? defaults.installRoot,
+        theme
       }
-      if (!backendUrl || !installRoot) {
+      if (!backendUrl || !installRoot || (stored.theme !== undefined && !isThemeId(stored.theme))) {
         this.log.warn('Some saved launcher settings were invalid; defaults were applied.')
       }
       return config
@@ -80,7 +85,8 @@ export class ConfigStore {
       installRoot:
         patch.installRoot === undefined
           ? this.current.installRoot
-          : normalizeInstallRoot(patch.installRoot)
+          : normalizeInstallRoot(patch.installRoot),
+      theme: isThemeId(patch.theme) ? patch.theme : this.current.theme
     }
 
     mkdirSync(next.installRoot, { recursive: true })
@@ -91,7 +97,8 @@ export class ConfigStore {
     this.current = next
     this.log.info('Launcher settings updated.', {
       backendUrl: next.backendUrl,
-      installRoot: next.installRoot
+      installRoot: next.installRoot,
+      theme: next.theme
     })
     return this.get()
   }

@@ -39,7 +39,7 @@ export interface RepoSnapshot {
 }
 
 const API_BASE = 'https://api.github.com'
-const USER_AGENT = 'mcm98-launcher-relay/0.1'
+const USER_AGENT = 'mcm98-launcher-relay/0.2'
 const configuredTtl = Number(process.env.CACHE_TTL_SECONDS ?? 300)
 const SUCCESS_TTL_MS = (Number.isFinite(configuredTtl) ? Math.max(30, configuredTtl) : 300) * 1000
 const ERROR_TTL_MS = 60_000

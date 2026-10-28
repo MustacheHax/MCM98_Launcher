@@ -7,6 +7,8 @@ export const IPC = {
   fetchCatalog: 'catalog:fetch',
   getLauncherUpdate: 'updater:get',
   checkLauncherUpdate: 'updater:check',
+  downloadLauncherUpdate: 'updater:download',
+  installLauncherUpdate: 'updater:install',
 
   listLibrary: 'library:list',
   startInstall: 'install:start',

@@ -34,6 +34,10 @@ const api: LauncherApi = {
     ipcRenderer.invoke(IPC.getLauncherUpdate) as Promise<LauncherUpdateInfo>,
   checkLauncherUpdate: () =>
     ipcRenderer.invoke(IPC.checkLauncherUpdate) as Promise<LauncherUpdateInfo>,
+  downloadLauncherUpdate: () =>
+    ipcRenderer.invoke(IPC.downloadLauncherUpdate) as Promise<LauncherUpdateInfo>,
+  installLauncherUpdate: () =>
+    ipcRenderer.invoke(IPC.installLauncherUpdate) as Promise<void>,
 
   listLibrary: () => ipcRenderer.invoke(IPC.listLibrary) as Promise<InstalledProduct[]>,
   startInstall: (request: InstallRequest) =>

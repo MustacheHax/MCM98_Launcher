@@ -19,6 +19,7 @@ export type IconName =
   | 'monitor'
   | 'clock'
   | 'sort'
+  | 'palette'
 
 const PATHS: Record<IconName, JSX.Element> = {
   library: (
@@ -129,6 +130,14 @@ const PATHS: Record<IconName, JSX.Element> = {
       <path d="M4 7h16" />
       <path d="M7 12h10" />
       <path d="M10 17h4" />
+    </>
+  ),
+  palette: (
+    <>
+      <path d="M12 3a9 9 0 1 0 0 18h1.6a1.9 1.9 0 0 0 0-3.8h-1.1a1.9 1.9 0 0 1 0-3.8H16a5 5 0 0 0 5-5c0-3-4-5.4-9-5.4Z" />
+      <circle cx="7.8" cy="9.5" r=".9" />
+      <circle cx="10.4" cy="6.6" r=".9" />
+      <circle cx="14.3" cy="7" r=".9" />
     </>
   )
 }

@@ -8,7 +8,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import type { CatalogResponse, HealthResponse, Platform } from '../../shared/types'
 import { loadCatalog, PLATFORMS, type Catalog, type CatalogProduct } from './catalog'
 import { getGitHubTokenProblem, hasGitHubToken, openAssetStream } from './github'
-import { launcherRepo, resolveLauncherRelease } from './launcher'
+import { launcherRepo, resolveLauncherAsset, resolveLauncherRelease } from './launcher'
 import { resolveProduct } from './resolver'
 
 const packageJson = JSON.parse(
@@ -86,6 +86,7 @@ app.get('/', (_req, res) => {
       '/api/health',
       '/api/catalog?platform=win32',
       '/api/launcher?platform=win32',
+      '/api/launcher/download?platform=win32',
       '/api/download/:productId?platform=win32'
     ]
   })
@@ -153,9 +154,61 @@ app.get(
     const platform = parsePlatform(req, res)
     if (!platform) return
 
-    const payload = await resolveLauncherRelease(platform)
+    const payload = await resolveLauncherRelease(platform, publicBaseUrl(req))
     res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
     res.json(payload)
+  })
+)
+
+app.get(
+  '/api/launcher/download',
+  asyncRoute(async (req, res) => {
+    const platform = parsePlatform(req, res)
+    if (!platform) return
+
+    const resolved = await resolveLauncherAsset(platform)
+    if (!resolved.release || !resolved.asset) {
+      res.status(404).json({ error: resolved.error ?? 'No launcher build is available.' })
+      return
+    }
+
+    const asset = resolved.asset
+    if (resolved.repoInfo?.private !== true && process.env.FORCE_RELAY !== '1') {
+      res.redirect(302, asset.browser_download_url)
+      return
+    }
+
+    const controller = new AbortController()
+    res.on('close', () => {
+      if (!res.writableEnded) controller.abort()
+    })
+
+    try {
+      const upstream = await openAssetStream(resolved.repo, asset.id, controller.signal)
+
+      res.status(200)
+      res.setHeader('Content-Type', asset.content_type || 'application/octet-stream')
+      res.setHeader('Content-Length', String(asset.size))
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${asset.name.replace(/["\r\n]/g, '_')}"`
+      )
+      res.setHeader('Cache-Control', 'no-store')
+
+      if (!upstream.body) throw new Error('GitHub returned an empty asset stream.')
+      await pipeline(
+        Readable.fromWeb(upstream.body as import('node:stream/web').ReadableStream),
+        res
+      )
+    } catch (error) {
+      if (controller.signal.aborted) return
+      console.error(`[launcher] ${asset.name} failed:`, error)
+      if (!res.headersSent) {
+        res.status(502).json({ error: 'The relay could not stream this launcher build.' })
+      } else {
+        res.destroy()
+      }
+    }
   })
 )
 

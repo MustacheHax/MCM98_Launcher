@@ -206,7 +206,8 @@ const wait = (ms: number): Promise<void> => new Promise((resolve) => window.setT
 export function createDemoApi(): LauncherApi {
   let config: LauncherConfig = {
     backendUrl: 'https://mcm98-launcher-api.onrender.com',
-    installRoot: DEMO_LIBRARY_ROOT
+    installRoot: DEMO_LIBRARY_ROOT,
+    theme: 'modern-dark'
   }
   let installed = seedLibrary()
   let sequence = 0
@@ -221,16 +222,27 @@ export function createDemoApi(): LauncherApi {
   const timers = new Map<string, { interval: number | null; timeouts: number[] }>()
   let launcherUpdate: LauncherUpdateInfo = {
     state: 'available',
-    currentVersion: '0.1.0',
-    latestVersion: '0.2.0',
-    releaseName: 'Launcher 0.2.0',
+    currentVersion: '0.2.0',
+    latestVersion: '0.2.1',
+    releaseName: 'Launcher 0.2.1',
     releaseUrl: 'https://github.com/MustacheHax/MCM98_Launcher/releases',
     publishedAt: '2026-10-27T18:00:00Z',
     notes: 'Launcher update preview for the browser demo.',
-    assetName: 'MCM98 Launcher-0.2.0-win-x64.exe',
+    assetName: 'MCM98 Launcher-0.2.1-win-x64.exe',
     assetSize: 121_000_000,
+    assetDownloadUrl:
+      'https://github.com/MustacheHax/MCM98_Launcher/releases/download/v0.2.1/MCM98-Launcher-0.2.1-win-x64.exe',
+    assetDigest: null,
     checkedAt: new Date().toISOString(),
-    error: null
+    error: null,
+    progress: {
+      phase: 'idle',
+      receivedBytes: 0,
+      totalBytes: 0,
+      speedBytesPerSec: 0,
+      message: null,
+      error: null
+    }
   }
 
   const snapshotTasks = (): InstallTask[] => [...tasks.values()].map(cloneTask)
@@ -343,7 +355,8 @@ export function createDemoApi(): LauncherApi {
     async saveConfig(patch) {
       const next: LauncherConfig = {
         backendUrl: patch.backendUrl?.trim() || config.backendUrl,
-        installRoot: patch.installRoot?.trim() || config.installRoot
+        installRoot: patch.installRoot?.trim() || config.installRoot,
+        theme: patch.theme ?? config.theme
       }
       try {
         void new URL(next.backendUrl)
@@ -364,7 +377,7 @@ export function createDemoApi(): LauncherApi {
       await wait(700)
       const health: HealthResponse = {
         ok: true,
-        version: '0.1.0',
+        version: '0.2.0',
         timestamp: new Date().toISOString(),
         catalogProducts: buildCatalogProducts().length,
         githubAuthenticated: true
@@ -374,7 +387,7 @@ export function createDemoApi(): LauncherApi {
 
     async getAppInfo() {
       const info: AppInfo = {
-        version: '0.1.0',
+        version: '0.2.0',
         platform: 'win32',
         arch: 'x64',
         isPackaged: false,
@@ -388,7 +401,7 @@ export function createDemoApi(): LauncherApi {
     async fetchCatalog() {
       await wait(720)
       const response: CatalogResponse = {
-        backendVersion: '0.1.0',
+        backendVersion: '0.2.0',
         generatedAt: new Date().toISOString(),
         platform: 'win32',
         products: buildCatalogProducts()
@@ -411,6 +424,59 @@ export function createDemoApi(): LauncherApi {
       }
       for (const listener of updateListeners) listener({ ...launcherUpdate })
       return { ...launcherUpdate }
+    },
+
+    async downloadLauncherUpdate() {
+      if (launcherUpdate.progress.phase === 'ready') return { ...launcherUpdate }
+      const total = launcherUpdate.assetSize ?? 1
+      let received = 0
+
+      launcherUpdate = {
+        ...launcherUpdate,
+        progress: {
+          phase: 'downloading',
+          receivedBytes: 0,
+          totalBytes: total,
+          speedBytesPerSec: 0,
+          message: 'Downloading launcher update',
+          error: null
+        }
+      }
+      for (const listener of updateListeners) listener({ ...launcherUpdate })
+
+      while (received < total) {
+        await wait(180)
+        received = Math.min(total, received + total * 0.09)
+        launcherUpdate = {
+          ...launcherUpdate,
+          progress: {
+            ...launcherUpdate.progress,
+            receivedBytes: received,
+            speedBytesPerSec: total * 0.5
+          }
+        }
+        for (const listener of updateListeners) listener({ ...launcherUpdate })
+      }
+
+      launcherUpdate = {
+        ...launcherUpdate,
+        progress: {
+          phase: 'ready',
+          receivedBytes: total,
+          totalBytes: total,
+          speedBytesPerSec: 0,
+          message: 'Ready to install',
+          error: null
+        }
+      }
+      for (const listener of updateListeners) listener({ ...launcherUpdate })
+      return { ...launcherUpdate }
+    },
+
+    async installLauncherUpdate() {
+      throw new Error(
+        'The launcher restarts itself in the installed app. This browser preview cannot apply the update.'
+      )
     },
 
     async listLibrary() {
