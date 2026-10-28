@@ -8,6 +8,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import type { CatalogResponse, HealthResponse, Platform } from '../../shared/types'
 import { loadCatalog, PLATFORMS, type Catalog, type CatalogProduct } from './catalog'
 import { getGitHubTokenProblem, hasGitHubToken, openAssetStream } from './github'
+import { launcherRepo, resolveLauncherRelease } from './launcher'
 import { resolveProduct } from './resolver'
 
 const packageJson = JSON.parse(
@@ -81,7 +82,12 @@ app.get('/', (_req, res) => {
   res.json({
     service: 'MCM98 Launcher Relay',
     version: VERSION,
-    endpoints: ['/api/health', '/api/catalog?platform=win32', '/api/download/:productId?platform=win32']
+    endpoints: [
+      '/api/health',
+      '/api/catalog?platform=win32',
+      '/api/launcher?platform=win32',
+      '/api/download/:productId?platform=win32'
+    ]
   })
 })
 
@@ -136,6 +142,18 @@ app.get(
       products: resolved
     }
 
+    res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
+    res.json(payload)
+  })
+)
+
+app.get(
+  '/api/launcher',
+  asyncRoute(async (req, res) => {
+    const platform = parsePlatform(req, res)
+    if (!platform) return
+
+    const payload = await resolveLauncherRelease(platform)
     res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
     res.json(payload)
   })
@@ -224,7 +242,7 @@ const server = app.listen(port, '0.0.0.0', () => {
       ? 'configured'
       : 'NOT configured'
   console.info(
-    `MCM98 relay v${VERSION} listening on :${port} — ${catalog.products.length} product(s), GitHub token ${tokenStatus}`
+    `MCM98 relay v${VERSION} listening on :${port} — ${catalog.products.length} product(s), launcher ${launcherRepo()}, GitHub token ${tokenStatus}`
   )
   if (tokenProblem) {
     console.warn(`[github] GITHUB_TOKEN is unusable. ${tokenProblem}`)

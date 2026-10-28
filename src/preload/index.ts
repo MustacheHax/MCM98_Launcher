@@ -8,7 +8,8 @@ import type {
   InstallTask,
   InstalledProduct,
   LauncherApi,
-  LauncherConfig
+  LauncherConfig,
+  LauncherUpdateInfo
 } from '@shared/types'
 
 function subscribe<T>(channel: string, callback: (payload: T) => void): () => void {
@@ -29,6 +30,10 @@ const api: LauncherApi = {
     ipcRenderer.invoke(IPC.testBackend, url) as Promise<HealthResponse>,
   getAppInfo: () => ipcRenderer.invoke(IPC.getAppInfo) as Promise<AppInfo>,
   fetchCatalog: () => ipcRenderer.invoke(IPC.fetchCatalog) as Promise<CatalogResponse>,
+  getLauncherUpdate: () =>
+    ipcRenderer.invoke(IPC.getLauncherUpdate) as Promise<LauncherUpdateInfo>,
+  checkLauncherUpdate: () =>
+    ipcRenderer.invoke(IPC.checkLauncherUpdate) as Promise<LauncherUpdateInfo>,
 
   listLibrary: () => ipcRenderer.invoke(IPC.listLibrary) as Promise<InstalledProduct[]>,
   startInstall: (request: InstallRequest) =>
@@ -48,7 +53,9 @@ const api: LauncherApi = {
 
   onTasks: (callback) => subscribe<InstallTask[]>(IPC.tasksChanged, callback),
   onLibraryChanged: (callback) => subscribe<void>(IPC.libraryChanged, () => callback()),
-  onRunningChanged: (callback) => subscribe<string[]>(IPC.runningChanged, callback)
+  onRunningChanged: (callback) => subscribe<string[]>(IPC.runningChanged, callback),
+  onLauncherUpdate: (callback) =>
+    subscribe<LauncherUpdateInfo>(IPC.launcherUpdateChanged, callback)
 }
 
 contextBridge.exposeInMainWorld('launcher', api)

@@ -17,6 +17,7 @@ import type {
   InstallTask,
   InstalledProduct,
   LauncherConfig,
+  LauncherUpdateInfo,
   Platform
 } from '@shared/types'
 import { ConfigStore, normalizeBackendUrl, normalizeInstallRoot } from './config'
@@ -26,6 +27,7 @@ import { LaunchService } from './launch'
 import { LibraryService } from './library'
 import { Logger } from './logger'
 import { checkBackend, fetchCatalog } from './relay'
+import { LauncherUpdater } from './updater'
 
 app.setName('MCM98 Launcher')
 
@@ -38,6 +40,7 @@ let config: ConfigStore
 let library: LibraryService
 let launch: LaunchService
 let installer: InstallManager
+let updater: LauncherUpdater
 
 function currentPlatform(): Platform {
   if (!SUPPORTED_PLATFORMS.includes(process.platform as Platform)) {
@@ -96,6 +99,9 @@ function registerIpc(): void {
         await installer.recover()
         broadcast(IPC.libraryChanged)
       }
+      if (patch.backendUrl !== undefined) {
+        void updater.check()
+      }
       return saved
     }
   )
@@ -132,6 +138,12 @@ function registerIpc(): void {
 
   ipcMain.handle(IPC.fetchCatalog, async () => {
     return fetchCatalog(config.get(), currentPlatform(), logger)
+  })
+
+  ipcMain.handle(IPC.getLauncherUpdate, (): LauncherUpdateInfo => updater.getInfo())
+
+  ipcMain.handle(IPC.checkLauncherUpdate, (): Promise<LauncherUpdateInfo> => {
+    return updater.check()
   })
 
   ipcMain.handle(IPC.listLibrary, (): Promise<InstalledProduct[]> => library.list())
@@ -334,6 +346,9 @@ async function bootstrap(): Promise<void> {
   })
 
   await installer.recover()
+  updater = new LauncherUpdater(config, currentPlatform(), logger, (info) => {
+    broadcast(IPC.launcherUpdateChanged, info)
+  })
   registerIpc()
 
   if (!process.platform.startsWith('darwin')) {
@@ -341,6 +356,7 @@ async function bootstrap(): Promise<void> {
   }
 
   await createWindow()
+  updater.start()
   logger.info(`Install library: ${config.get().installRoot}`)
 }
 
@@ -366,6 +382,10 @@ if (!app.requestSingleInstanceLock()) {
 
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()
+  })
+
+  app.on('before-quit', () => {
+    updater?.stop()
   })
 
   process.on('uncaughtException', (error) => {

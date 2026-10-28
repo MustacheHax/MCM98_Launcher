@@ -3,6 +3,7 @@ import type {
   CatalogResponse,
   HealthResponse,
   LauncherConfig,
+  LauncherReleaseResponse,
   Platform
 } from '@shared/types'
 import type { Logger } from './logger'
@@ -141,6 +142,21 @@ function assertHealth(payload: unknown): asserts payload is HealthResponse {
   }
 }
 
+function assertLauncherRelease(payload: unknown): asserts payload is LauncherReleaseResponse {
+  if (!payload || typeof payload !== 'object') {
+    throw new RelayError('The relay returned an invalid launcher release response.')
+  }
+  const response = payload as Partial<LauncherReleaseResponse>
+  if (
+    typeof response.platform !== 'string' ||
+    typeof response.repo !== 'string' ||
+    (response.release !== null && typeof response.release !== 'object') ||
+    (response.error !== null && typeof response.error !== 'string')
+  ) {
+    throw new RelayError('The relay returned a launcher release the app cannot read.')
+  }
+}
+
 export async function fetchCatalog(
   config: LauncherConfig,
   platform: Platform,
@@ -149,6 +165,21 @@ export async function fetchCatalog(
   const url = joinUrl(config.backendUrl, `/api/catalog?platform=${encodeURIComponent(platform)}`)
   const payload = await requestJson<unknown>(url, log)
   assertCatalog(payload)
+  return payload
+}
+
+export async function fetchLauncherRelease(
+  config: LauncherConfig,
+  platform: Platform,
+  log: Logger
+): Promise<LauncherReleaseResponse> {
+  const url = joinUrl(config.backendUrl, `/api/launcher?platform=${encodeURIComponent(platform)}`)
+  const payload = await requestJson<unknown>(url, log, {
+    attempts: 2,
+    timeoutMs: 20_000,
+    retryDelayMs: 1_500
+  })
+  assertLauncherRelease(payload)
   return payload
 }
 

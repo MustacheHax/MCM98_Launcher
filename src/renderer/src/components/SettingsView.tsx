@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { HealthResponse } from '@shared/types'
 import { errorMessage, getLauncher } from '../api'
 import { useApp } from '../state'
-import { platformLabel } from '../utils'
+import { formatBytes, formatDate, platformLabel } from '../utils'
 import { PageHeader } from './PageHeader'
 import { Icon } from './Icons'
 
@@ -33,6 +33,9 @@ export function SettingsView(): JSX.Element {
     saveSettings,
     openFolder,
     openDataFolder,
+    launcherUpdate,
+    checkLauncherUpdate,
+    openExternal,
     toast,
     demoMode
   } = useApp()
@@ -50,6 +53,40 @@ export function SettingsView(): JSX.Element {
 
   const urlError = validateUrl(backendUrl)
   const rootError = installRoot.trim() ? null : 'Choose an install folder.'
+  const updateChecking = launcherUpdate?.state === 'checking'
+  const updateAvailable = launcherUpdate?.state === 'available'
+  const updateTone =
+    launcherUpdate?.state === 'available'
+      ? 'update'
+      : launcherUpdate?.state === 'checking'
+        ? 'connecting'
+        : launcherUpdate?.state === 'current'
+          ? 'online'
+          : launcherUpdate?.state === 'error'
+            ? 'offline'
+            : 'idle'
+  const updateMessage = (() => {
+    if (!launcherUpdate || launcherUpdate.state === 'idle') return 'Not checked yet.'
+    if (launcherUpdate.state === 'checking') return 'Checking GitHub releases…'
+    if (launcherUpdate.state === 'available') {
+      const build = launcherUpdate.assetName
+        ? `${launcherUpdate.assetName}${
+            launcherUpdate.assetSize ? ` · ${formatBytes(launcherUpdate.assetSize)}` : ''
+          }`
+        : null
+      return `v${launcherUpdate.latestVersion} is available. You are on v${launcherUpdate.currentVersion}.${
+        build ? ` ${build}.` : ''
+      }${
+        launcherUpdate.publishedAt
+          ? ` Published ${formatDate(launcherUpdate.publishedAt)}.`
+          : ''
+      }`
+    }
+    if (launcherUpdate.state === 'current') {
+      return `You are on the latest release (v${launcherUpdate.currentVersion}).`
+    }
+    return launcherUpdate.error ?? 'No launcher release has been published yet.'
+  })()
   const dirty = Boolean(
     config &&
       (backendUrl.trim() !== config.backendUrl || installRoot.trim() !== config.installRoot)
@@ -280,6 +317,34 @@ export function SettingsView(): JSX.Element {
                 <dd>{appInfo?.isPackaged ? 'Packaged' : 'Development'}</dd>
               </div>
             </dl>
+
+            <div className="launcher-update-panel">
+              <div className="launcher-update-head">
+                <span className={`status-dot ${updateTone}`} />
+                <span>Launcher update</span>
+                <span className="mono">v{appInfo?.version ?? '0.1.0'}</span>
+              </div>
+              <p>{updateMessage}</p>
+              <div className="test-row">
+                <button
+                  className="btn btn-sm"
+                  onClick={() => void checkLauncherUpdate()}
+                  disabled={updateChecking}
+                >
+                  <Icon name="refresh" size={14} />
+                  {updateChecking ? 'Checking…' : 'Check now'}
+                </button>
+                {updateAvailable && launcherUpdate?.releaseUrl && (
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => void openExternal(launcherUpdate.releaseUrl as string)}
+                  >
+                    <Icon name="external" size={13} />
+                    View release
+                  </button>
+                )}
+              </div>
+            </div>
 
             <div className="about-path">
               <span className="field-label">Data folder</span>

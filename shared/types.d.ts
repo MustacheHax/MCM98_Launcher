@@ -64,6 +64,48 @@ export interface HealthResponse {
   githubAuthenticated: boolean
 }
 
+/** A release of the launcher itself, resolved by the relay. */
+export interface LauncherReleaseInfo {
+  version: string
+  tag: string
+  name: string
+  publishedAt: string
+  prerelease: boolean
+  url: string
+  notes: string | null
+  assetName: string | null
+  assetSize: number | null
+}
+
+export interface LauncherReleaseResponse {
+  platform: Platform
+  repo: string
+  release: LauncherReleaseInfo | null
+  error: string | null
+}
+
+export type LauncherUpdateState =
+  | 'idle'
+  | 'checking'
+  | 'current'
+  | 'available'
+  | 'unavailable'
+  | 'error'
+
+export interface LauncherUpdateInfo {
+  state: LauncherUpdateState
+  currentVersion: string
+  latestVersion: string | null
+  releaseName: string | null
+  releaseUrl: string | null
+  publishedAt: string | null
+  notes: string | null
+  assetName: string | null
+  assetSize: number | null
+  checkedAt: string | null
+  error: string | null
+}
+
 /* ------------------------------------------------------------------ */
 /* Desktop-only contracts                                              */
 /* ------------------------------------------------------------------ */
@@ -149,6 +191,8 @@ export interface LauncherApi {
   testBackend(url: string): Promise<HealthResponse>
   getAppInfo(): Promise<AppInfo>
   fetchCatalog(): Promise<CatalogResponse>
+  getLauncherUpdate(): Promise<LauncherUpdateInfo>
+  checkLauncherUpdate(): Promise<LauncherUpdateInfo>
 
   listLibrary(): Promise<InstalledProduct[]>
   startInstall(request: InstallRequest): Promise<InstallTask>
@@ -166,6 +210,7 @@ export interface LauncherApi {
   onTasks(callback: (tasks: InstallTask[]) => void): () => void
   onLibraryChanged(callback: () => void): () => void
   onRunningChanged(callback: (productIds: string[]) => void): () => void
+  onLauncherUpdate(callback: (info: LauncherUpdateInfo) => void): () => void
 }
 
 declare global {

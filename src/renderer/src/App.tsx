@@ -7,6 +7,7 @@ import type {
   InstalledProduct,
   LauncherApi,
   LauncherConfig,
+  LauncherUpdateInfo,
   ProductEntry
 } from '@shared/types'
 import { errorMessage, demoMode, getLauncher } from './api'
@@ -19,6 +20,7 @@ import { DownloadsView } from './components/DownloadsView'
 import { SettingsView } from './components/SettingsView'
 import { ProductDrawer } from './components/ProductDrawer'
 import { ConfirmDialog } from './components/ConfirmDialog'
+import { LauncherUpdateBanner } from './components/LauncherUpdateBanner'
 import { Toast } from './components/Toast'
 
 interface ToastState {
@@ -42,6 +44,8 @@ function App(): JSX.Element {
   const [catalog, setCatalog] = useState<CatalogResponse | null>(null)
   const [catalogLoading, setCatalogLoading] = useState(true)
   const [catalogError, setCatalogError] = useState<string | null>(null)
+  const [launcherUpdate, setLauncherUpdate] = useState<LauncherUpdateInfo | null>(null)
+  const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState<string | null>(null)
   const [library, setLibrary] = useState<InstalledProduct[]>([])
   const [tasks, setTasks] = useState<InstallTask[]>([])
   const [running, setRunning] = useState<string[]>([])
@@ -101,22 +105,26 @@ function App(): JSX.Element {
       void refreshLibrary()
     })
     const unsubscribeRunning = bridge.onRunningChanged((ids) => setRunning(ids))
+    const unsubscribeUpdate = bridge.onLauncherUpdate((next) => setLauncherUpdate(next))
 
     void (async () => {
       try {
-        const [cfg, info, currentTasks, currentRunning, currentLibrary] = await Promise.all([
-          bridge.getConfig(),
-          bridge.getAppInfo(),
-          bridge.getTasks(),
-          bridge.getRunning(),
-          bridge.listLibrary()
-        ])
+        const [cfg, info, currentTasks, currentRunning, currentLibrary, currentUpdate] =
+          await Promise.all([
+            bridge.getConfig(),
+            bridge.getAppInfo(),
+            bridge.getTasks(),
+            bridge.getRunning(),
+            bridge.listLibrary(),
+            bridge.getLauncherUpdate()
+          ])
         if (!alive) return
         setConfig(cfg)
         setAppInfo(info)
         setTasks(currentTasks)
         setRunning(currentRunning)
         setLibrary(currentLibrary)
+        setLauncherUpdate(currentUpdate)
       } catch (error) {
         if (alive) setBootError(errorMessage(error))
       }
@@ -127,6 +135,7 @@ function App(): JSX.Element {
       unsubscribeTasks()
       unsubscribeLibrary()
       unsubscribeRunning()
+      unsubscribeUpdate()
     }
   }, [bridge, refreshLibrary])
 
@@ -221,6 +230,33 @@ function App(): JSX.Element {
     }
   }, [bridge, toast])
 
+  const openExternal = useCallback(
+    async (url: string): Promise<void> => {
+      if (!bridge) return
+      try {
+        await bridge.openExternal(url)
+      } catch (error) {
+        toast(errorMessage(error), 'error')
+      }
+    },
+    [bridge, toast]
+  )
+
+  const checkLauncherUpdate = useCallback(async (): Promise<void> => {
+    if (!bridge) return
+    try {
+      setLauncherUpdate(await bridge.checkLauncherUpdate())
+    } catch (error) {
+      toast(errorMessage(error), 'error')
+    }
+  }, [bridge, toast])
+
+  const dismissLauncherUpdate = useCallback((): void => {
+    if (launcherUpdate?.latestVersion) {
+      setDismissedUpdateVersion(launcherUpdate.latestVersion)
+    }
+  }, [launcherUpdate?.latestVersion])
+
   const saveSettings = useCallback(
     async (patch: Partial<LauncherConfig>): Promise<void> => {
       if (!bridge || !config) return
@@ -288,6 +324,8 @@ function App(): JSX.Element {
       catalog,
       catalogLoading,
       catalogError,
+      launcherUpdate,
+      dismissedUpdateVersion,
       library,
       tasks,
       running,
@@ -298,6 +336,9 @@ function App(): JSX.Element {
       closeProduct: () => setSelected(null),
       refreshCatalog: loadCatalog,
       refreshLibrary,
+      checkLauncherUpdate,
+      dismissLauncherUpdate,
+      openExternal,
       install,
       launch,
       requestUninstall: (product: InstalledProduct) => setConfirmProduct(product),
@@ -317,6 +358,8 @@ function App(): JSX.Element {
       catalog,
       catalogLoading,
       catalogError,
+      launcherUpdate,
+      dismissedUpdateVersion,
       library,
       tasks,
       running,
@@ -324,6 +367,9 @@ function App(): JSX.Element {
       selected,
       loadCatalog,
       refreshLibrary,
+      checkLauncherUpdate,
+      dismissLauncherUpdate,
+      openExternal,
       install,
       launch,
       openFolder,
@@ -346,6 +392,19 @@ function App(): JSX.Element {
         <div className="app-body">
           <Sidebar />
           <main className="main" id="main-content">
+            {launcherUpdate?.state === 'available' &&
+              launcherUpdate.latestVersion &&
+              launcherUpdate.latestVersion !== dismissedUpdateVersion && (
+                <div className="update-banner-slot">
+                  <LauncherUpdateBanner
+                    update={launcherUpdate}
+                    onDismiss={dismissLauncherUpdate}
+                    onViewRelease={() => {
+                      if (launcherUpdate.releaseUrl) void openExternal(launcherUpdate.releaseUrl)
+                    }}
+                  />
+                </div>
+              )}
             {view === 'library' && <LibraryView />}
             {view === 'catalog' && <CatalogView />}
             {view === 'downloads' && <DownloadsView />}

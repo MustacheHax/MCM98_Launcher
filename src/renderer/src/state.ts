@@ -5,6 +5,7 @@ import type {
   InstallTask,
   InstalledProduct,
   LauncherConfig,
+  LauncherUpdateInfo,
   ProductEntry
 } from '@shared/types'
 
@@ -21,6 +22,8 @@ export interface AppContextValue {
   catalog: CatalogResponse | null
   catalogLoading: boolean
   catalogError: string | null
+  launcherUpdate: LauncherUpdateInfo | null
+  dismissedUpdateVersion: string | null
   library: InstalledProduct[]
   tasks: InstallTask[]
   running: string[]
@@ -31,6 +34,9 @@ export interface AppContextValue {
   closeProduct: () => void
   refreshCatalog: () => Promise<void>
   refreshLibrary: () => Promise<void>
+  checkLauncherUpdate: () => Promise<void>
+  dismissLauncherUpdate: () => void
+  openExternal: (url: string) => Promise<void>
   install: (product: ProductEntry) => Promise<void>
   launch: (productId: string) => Promise<void>
   requestUninstall: (product: InstalledProduct) => void

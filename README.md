@@ -14,6 +14,7 @@ GitHub Releases ──► Render relay ──► Electron launcher ──► loc
 
 - **Desktop launcher** — Electron + React + TypeScript, custom dark UI, generated cover art, install/update/play/uninstall flows, download queue, settings, logs.
 - **Relay** — Express + TypeScript API suitable for Render. It reads a developer-owned catalog, resolves GitHub releases server-side, caches responses, and streams private release assets without exposing a GitHub token.
+- **Launcher update checks** — the relay resolves the launcher's own GitHub releases; the app shows an update prompt and opens the release page. Installing a launcher update is still a manual action.
 - **Shared contract** — one set of API/IPC types consumed by both sides.
 - **Render Blueprint** — `render.yaml` provisions the web service.
 - **Demo mode** — the renderer can run in a browser with sample data for UI work (`npm run dev:ui`).
@@ -150,6 +151,22 @@ Supported asset selection details:
 - Cross-platform asset names are not arch-aware beyond the glob you write. Use explicit patterns such as `*win64*.zip` when a release contains multiple architectures.
 - GitHub's sha256 asset digest is passed to the launcher when GitHub provides one; the launcher verifies it after download.
 
+## Publishing a launcher update
+
+The launcher checks its own repository for stable GitHub Releases. By default this is `MustacheHax/MCM98_Launcher`; change it on the relay with `LAUNCHER_REPO`.
+
+1. Set `version` in `package.json` to the next semantic version, for example `0.2.0`.
+2. Build the installer with `npm run dist:win` (and the platform-specific command for macOS/Linux).
+3. Publish a **stable** GitHub Release tagged `v0.2.0` (or `0.2.0`) and attach the launcher artifact:
+   - Windows: `MCM98 Launcher-0.2.0-win-x64.exe` or a Windows `.zip`
+   - macOS: a `.dmg` or macOS `.zip`
+   - Linux: an `.AppImage`, `.tar.gz`, or `.zip`
+4. Redeploy the relay if `LAUNCHER_REPO` changed. The launcher checks on startup, every six hours, and when **Check now** is clicked in Settings.
+
+The app compares the release tag with its own version and only prompts when the release is newer. It does not silently replace its own executable; **View release** opens the GitHub release so the installer can be downloaded and run explicitly. The published release must not be a prerelease or draft.
+
+Until a stable launcher release exists, Settings shows that no launcher release has been published yet. That is expected.
+
 ## Deploying the relay to Render
 
 ### Blueprint (recommended)
@@ -173,7 +190,7 @@ Supported asset selection details:
 The relay needs a **personal access token** that can read the repository. The simplest option is a fine-grained token:
 
 1. In GitHub, open **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
-2. Under **Repository access**, choose **Only select repositories** and select the private repository (for example, `MustacheHax/StreamFriend`).
+2. Under **Repository access**, choose **Only select repositories** and select every private repository the relay must read — for example, `MustacheHax/StreamFriend` and `MustacheHax/MCM98_Launcher` (the launcher update source).
 3. Under **Permissions → Repository permissions**, set **Contents** to **Read-only**. **Metadata** is included automatically.
 4. Generate the token and copy the value beginning with `github_pat_`.
 5. In Render, open the relay service → **Environment**, set `GITHUB_TOKEN` to exactly that value, and save. The value must not include quotes, `Bearer`, or line breaks.
@@ -192,6 +209,7 @@ A GitHub App **installation access token** (`ghs_…`) also works with the relay
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `GITHUB_TOKEN` | unset | GitHub API token. Strongly recommended. Required for private repositories. Use a fine-grained personal access token with read-only Contents access. Never use a GitHub App private key or JWT. |
+| `LAUNCHER_REPO` | `MustacheHax/MCM98_Launcher` | Repository whose stable GitHub Releases are checked for launcher updates. |
 | `CATALOG_PATH` | `server/catalog.json` | Alternate catalog file path. |
 | `PUBLIC_BASE_URL` | request origin | Public relay base used to build private-asset download URLs. Set this when behind a custom domain/proxy. |
 | `CACHE_TTL_SECONDS` | `300` | How long resolved GitHub releases stay cached in memory. |
@@ -207,6 +225,7 @@ GitHub's unauthenticated API limit is 60 requests/hour per IP, which a catalog r
 | --- | --- |
 | `GET /api/health` | Service version, catalog size, and whether a GitHub token is configured. |
 | `GET /api/catalog?platform=win32` | Resolved catalog for `win32`, `linux`, or `darwin`. |
+| `GET /api/launcher?platform=win32` | Newest stable launcher release and matching installer asset for the platform. |
 | `GET /api/download/:productId?platform=win32` | Streams a private asset through the relay, or redirects to GitHub for public assets. |
 
 The catalog response includes the latest release tag, release notes, asset name/size/digest, a platform-specific download URL, available platforms, and the configured executable hint.
@@ -269,7 +288,7 @@ On startup the launcher repairs interrupted updates, restores a previous `app/` 
 ## Current limitations and next steps
 
 - No accounts, profiles, SSO, game keys, or per-user entitlements yet.
-- No launcher self-update yet. Product updates are supported; shipping launcher updates is the next layer (electron-updater or a release feed).
+- Launcher update detection is included; installing a launcher update is still a manual download from the GitHub release. Silent self-replacement is not wired yet.
 - No resumable downloads, delta updates, or parallel chunking.
 - No 7z, DMG, or MSI installation. Supported formats are archives, portable Windows `.exe`, and Linux `.AppImage`.
 - No code signing on Windows or notarization on macOS. Users may see SmartScreen/Gatekeeper warnings; production distribution needs signing.
@@ -278,7 +297,7 @@ On startup the launcher repairs interrupted updates, restores a previous `app/` 
 - No per-release arch metadata; use explicit asset globs.
 - Rollback is crash-recovery only, not a user-facing version picker.
 
-Natural next steps: SSO profiles and entitlements, launcher self-updates, save/data management, per-product news and patch notes, and relay-side access control.
+Natural next steps: SSO profiles and entitlements, automatic launcher installer replacement, save/data management, per-product news and patch notes, and relay-side access control.
 
 ## Scripts
 
@@ -306,6 +325,8 @@ It opens a hidden window, checks that the preload bridge exists and the React UI
 ## Troubleshooting
 
 - **"The relay is not answering"** — confirm the Render service is awake and the URL in Settings is exactly the service URL, with no trailing path. Free instances can take up to a minute to wake.
+- **"No launcher release has been published yet"** — publish a stable release in `LAUNCHER_REPO` with a Windows `.exe`/`.zip`, macOS `.dmg`/`.zip`, or Linux `.AppImage`/`.tar.gz` asset. Drafts and prereleases are ignored.
+- **Launcher update prompt does not appear** — confirm the release tag is newer than `package.json` and uses a semantic version such as `v0.2.0`; the release must have an asset for the current platform.
 - **"The relay's GITHUB_TOKEN is not usable..."** — the relay rejected the credential before contacting GitHub. Usually `GITHUB_TOKEN` holds a GitHub App private key, an App JWT, or a malformed value. Replace it with a fine-grained personal access token as described in [GitHub token for private repositories](#github-token-for-private-repositories). Rotate any private key that was pasted into the variable.
 - **"GitHub rejected the configured GITHUB_TOKEN"** — the token is expired, revoked, or lacks access to the repository. Generate a fresh fine-grained token with Contents read access and update the Render environment variable.
 - **"Repository not found, or it is private..."** — set `GITHUB_TOKEN` on the relay. For public repositories, also confirm `repo` is `owner/name` and the release is published (not a draft).

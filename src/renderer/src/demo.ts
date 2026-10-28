@@ -7,6 +7,7 @@ import type {
   InstalledProduct,
   LauncherApi,
   LauncherConfig,
+  LauncherUpdateInfo,
   ProductEntry,
   Platform
 } from '@shared/types'
@@ -216,7 +217,21 @@ export function createDemoApi(): LauncherApi {
   const taskListeners = new Set<(tasks: InstallTask[]) => void>()
   const libraryListeners = new Set<() => void>()
   const runningListeners = new Set<(ids: string[]) => void>()
+  const updateListeners = new Set<(info: LauncherUpdateInfo) => void>()
   const timers = new Map<string, { interval: number | null; timeouts: number[] }>()
+  let launcherUpdate: LauncherUpdateInfo = {
+    state: 'available',
+    currentVersion: '0.1.0',
+    latestVersion: '0.2.0',
+    releaseName: 'Launcher 0.2.0',
+    releaseUrl: 'https://github.com/MustacheHax/MCM98_Launcher/releases',
+    publishedAt: '2026-10-27T18:00:00Z',
+    notes: 'Launcher update preview for the browser demo.',
+    assetName: 'MCM98 Launcher-0.2.0-win-x64.exe',
+    assetSize: 121_000_000,
+    checkedAt: new Date().toISOString(),
+    error: null
+  }
 
   const snapshotTasks = (): InstallTask[] => [...tasks.values()].map(cloneTask)
   const emitTasks = (): void => {
@@ -381,6 +396,23 @@ export function createDemoApi(): LauncherApi {
       return response
     },
 
+    async getLauncherUpdate() {
+      return { ...launcherUpdate }
+    },
+
+    async checkLauncherUpdate() {
+      launcherUpdate = { ...launcherUpdate, state: 'checking', checkedAt: null }
+      for (const listener of updateListeners) listener({ ...launcherUpdate })
+      await wait(650)
+      launcherUpdate = {
+        ...launcherUpdate,
+        state: 'available',
+        checkedAt: new Date().toISOString()
+      }
+      for (const listener of updateListeners) listener({ ...launcherUpdate })
+      return { ...launcherUpdate }
+    },
+
     async listLibrary() {
       await wait(120)
       return installed.map((item) => ({ ...item }))
@@ -488,6 +520,11 @@ export function createDemoApi(): LauncherApi {
     onRunningChanged(callback) {
       runningListeners.add(callback)
       return () => runningListeners.delete(callback)
+    },
+
+    onLauncherUpdate(callback) {
+      updateListeners.add(callback)
+      return () => updateListeners.delete(callback)
     }
   }
 }

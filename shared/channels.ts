@@ -5,6 +5,8 @@ export const IPC = {
   testBackend: 'backend:test',
   getAppInfo: 'app:info',
   fetchCatalog: 'catalog:fetch',
+  getLauncherUpdate: 'updater:get',
+  checkLauncherUpdate: 'updater:check',
 
   listLibrary: 'library:list',
   startInstall: 'install:start',
@@ -21,5 +23,6 @@ export const IPC = {
 
   tasksChanged: 'event:tasks',
   libraryChanged: 'event:library',
-  runningChanged: 'event:running'
+  runningChanged: 'event:running',
+  launcherUpdateChanged: 'event:launcher-update'
 } as const

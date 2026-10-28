@@ -63,7 +63,7 @@ export function LibraryView(): JSX.Element {
               disabled={catalogLoading}
             >
               <Icon name="refresh" size={15} className={catalogLoading ? 'spin' : ''} />
-              Check for updates
+              Check product updates
             </button>
           </div>
         }

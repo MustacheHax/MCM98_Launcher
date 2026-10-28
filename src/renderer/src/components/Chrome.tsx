@@ -49,6 +49,7 @@ export function Sidebar(): JSX.Element {
     catalogLoading,
     config,
     appInfo,
+    launcherUpdate,
     demoMode
   } = useApp()
 
@@ -102,6 +103,18 @@ export function Sidebar(): JSX.Element {
       </nav>
 
       <div className="sidebar-spacer" />
+
+      {launcherUpdate?.state === 'available' && launcherUpdate.latestVersion && (
+        <button
+          className="sidebar-update"
+          onClick={() => navigate('settings')}
+          title={`Launcher update v${launcherUpdate.latestVersion} is available`}
+        >
+          <span className="sidebar-update-dot" />
+          <span>Launcher v{launcherUpdate.latestVersion}</span>
+          <Icon name="chevronRight" size={13} />
+        </button>
+      )}
 
       <div className="relay-card">
         <div className="relay-card-top">
