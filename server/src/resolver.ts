@@ -15,6 +15,10 @@ import {
 } from './github'
 
 const ARCHIVE_PATTERN = /\.(zip|tar\.gz|tgz)$/i
+const DIRECT_EXECUTABLE_PATTERN: Partial<Record<Platform, RegExp>> = {
+  win32: /\.exe$/i,
+  linux: /\.appimage$/i
+}
 const AUXILIARY_ASSET_PATTERN =
   /(chromedriver|ffmpeg|mksnapshot|xcache|symbols?|debug|breakpad|libcxx|headers|pdb|dsym|toolchain|snapshot|shasums|hunspell|dictionaries|api\.json|node\.lib)/i
 
@@ -30,9 +34,9 @@ const PLATFORM_HINTS: Record<Platform, RegExp> = {
   darwin: /(?:^|[^a-z])(?:mac|macos|osx|darwin|apple)(?:[^a-z]|$)/i
 }
 
-const ARCHIVE_PREFERENCE: Record<Platform, RegExp[]> = {
-  win32: [/\.zip$/i, /\.tar\.gz$/i, /\.tgz$/i],
-  linux: [/\.tar\.gz$/i, /\.tgz$/i, /\.zip$/i],
+const ASSET_PREFERENCE: Record<Platform, RegExp[]> = {
+  win32: [/\.zip$/i, /\.tar\.gz$/i, /\.tgz$/i, /\.exe$/i],
+  linux: [/\.tar\.gz$/i, /\.tgz$/i, /\.zip$/i, /\.appimage$/i],
   darwin: [/\.zip$/i, /\.tar\.gz$/i, /\.tgz$/i]
 }
 
@@ -50,6 +54,22 @@ export interface ResolvedProduct {
 
 function isArchive(asset: GitHubAsset): boolean {
   return ARCHIVE_PATTERN.test(asset.name)
+}
+
+/**
+ * A release can ship a multi-file archive or a single self-contained
+ * executable. Raw executables are only accepted for the matching OS; a
+ * Windows .exe can never be offered as a Linux or macOS build.
+ */
+function isInstallable(asset: GitHubAsset, platform: Platform): boolean {
+  return ARCHIVE_PATTERN.test(asset.name) || Boolean(DIRECT_EXECUTABLE_PATTERN[platform]?.test(asset.name))
+}
+
+function supportedFormats(platform: Platform): string {
+  const base = '.zip, .tar.gz, or .tgz'
+  if (platform === 'win32') return `${base}, or a portable .exe`
+  if (platform === 'linux') return `${base}, or an .AppImage`
+  return base
 }
 
 function matchesPlatform(asset: GitHubAsset, platform: Platform): boolean {
@@ -81,7 +101,7 @@ function scoreAsset(asset: GitHubAsset, platform: Platform, product: CatalogProd
   const hits = tokens.filter((token) => name.includes(token)).length
   score += Math.min(hits, 4) * 2
 
-  const preferenceIndex = ARCHIVE_PREFERENCE[platform].findIndex((pattern) =>
+  const preferenceIndex = ASSET_PREFERENCE[platform].findIndex((pattern) =>
     pattern.test(asset.name)
   )
   if (preferenceIndex === 0) score += 2
@@ -91,10 +111,10 @@ function scoreAsset(asset: GitHubAsset, platform: Platform, product: CatalogProd
 }
 
 /**
- * Chooses the most useful archive from a set: the actual build over checksum,
- * symbols, or tooling assets, then the platform's preferred archive type.
+ * Chooses the most useful installable asset: the actual build over checksum,
+ * symbols, or tooling assets, then archives before single-file executables.
  */
-function preferArchive(
+function preferAsset(
   assets: GitHubAsset[],
   platform: Platform,
   product: CatalogProduct
@@ -104,6 +124,8 @@ function preferArchive(
     .sort((a, b) => {
       const scoreDiff = scoreAsset(b, platform, product) - scoreAsset(a, platform, product)
       if (scoreDiff !== 0) return scoreDiff
+      const archiveDiff = Number(isArchive(b)) - Number(isArchive(a))
+      if (archiveDiff !== 0) return archiveDiff
       if (a.name.length !== b.name.length) return a.name.length - b.name.length
       return a.name.localeCompare(b.name)
     })[0] as GitHubAsset
@@ -127,36 +149,41 @@ function selectAsset(release: GitHubRelease, product: CatalogProduct, platform: 
         error: `No asset matched "${rule.asset}" in release ${release.tag_name}.`
       }
     }
-    const archive = matches.find(isArchive)
-    if (!archive) {
+    const installable = matches.filter((asset) => isInstallable(asset, platform))
+    if (installable.length === 0) {
       return {
         asset: null,
-        error: `The configured asset is not a supported archive (.zip, .tar.gz, .tgz).`
+        error: `The configured asset is not a supported ${PLATFORM_LABEL[platform]} build (${supportedFormats(platform)}).`
       }
     }
-    return { asset: preferArchive(matches.filter(isArchive), platform, product), error: null }
+    return { asset: preferAsset(installable, platform, product), error: null }
   }
 
-  const archives = release.assets.filter(isArchive)
-  if (archives.length === 0) {
+  const installable = release.assets.filter((asset) => isInstallable(asset, platform))
+  if (installable.length === 0) {
     return {
       asset: null,
-      error: `Release ${release.tag_name} has no installable archive (.zip, .tar.gz, .tgz).`
+      error: `Release ${release.tag_name} has no installable ${PLATFORM_LABEL[platform]} build (${supportedFormats(platform)}).`
     }
   }
 
-  const hinted = archives.filter(
-    (asset) => matchesPlatform(asset, platform) && !hasOtherPlatformHint(asset, platform)
+  // A single archive with no OS in its name is treated as a universal build.
+  const universal = installable.filter(
+    (asset) =>
+      isArchive(asset) &&
+      !PLATFORMS.some((item) => PLATFORM_HINTS[item].test(asset.name))
   )
-  if (hinted.length > 0) {
-    return { asset: preferArchive(hinted, platform, product), error: null }
+  if (universal.length > 0) {
+    return { asset: preferAsset(universal, platform, product), error: null }
   }
 
-  const unhinted = archives.filter(
-    (asset) => !PLATFORMS.some((item) => PLATFORM_HINTS[item].test(asset.name))
+  const hinted = installable.filter(
+    (asset) =>
+      !isArchive(asset) ||
+      (matchesPlatform(asset, platform) && !hasOtherPlatformHint(asset, platform))
   )
-  if (unhinted.length > 0 && unhinted.length === archives.length) {
-    return { asset: preferArchive(unhinted, platform, product), error: null }
+  if (hinted.length > 0) {
+    return { asset: preferAsset(hinted, platform, product), error: null }
   }
 
   return {
@@ -258,7 +285,8 @@ export async function resolveProduct(
       entry: {
         ...baseEntry,
         error:
-          snapshot.releaseError ??
+          (!repo && snapshot.repoError) ||
+          snapshot.releaseError ||
           'No published release was found for this repository.'
       },
       release: null,

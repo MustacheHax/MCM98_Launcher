@@ -1,13 +1,13 @@
 # MCM98 Launcher
 
-A Windows/macOS/Linux desktop launcher and updater for MCM98 games and applications. It lists the repositories you choose, resolves their newest GitHub Releases through a small relay on Render, downloads the right build for the user's platform, verifies it, unpacks it into a local library, and launches it.
+A Windows/macOS/Linux desktop launcher and updater for MCM98 games and applications. It lists the repositories you choose, resolves their newest GitHub Releases through a small relay on Render, downloads the right build for the user's platform, verifies it, installs it into a local library, and launches it.
 
 This first version is intentionally account-free: no Entra/SSO, profiles, entitlements, or game keys. It is a launcher and product updater, not a storefront yet.
 
 ```
 GitHub Releases ──► Render relay ──► Electron launcher ──► local library ──► game/app
                   (catalog, asset    (download, verify,
-                   resolution)        extract, launch)
+                   resolution)        install, launch)
 ```
 
 ## What is included
@@ -18,7 +18,7 @@ GitHub Releases ──► Render relay ──► Electron launcher ──► loc
 - **Render Blueprint** — `render.yaml` provisions the web service.
 - **Demo mode** — the renderer can run in a browser with sample data for UI work (`npm run dev:ui`).
 
-The launcher **installs prebuilt release artifacts**. It does not run a compiler or build source code on the user's machine. Export your game or app, attach the archive to a GitHub Release, and the launcher prepares the playable local install from that archive.
+The launcher **installs prebuilt release artifacts**. It does not run a compiler or build source code on the user's machine. Export your game or app, attach the build to a GitHub Release, and the launcher prepares the playable local install from that archive or portable executable.
 
 ## Project layout
 
@@ -83,15 +83,16 @@ Then open `http://localhost:5174`.
 ## Publishing a product
 
 1. **Export a playable build.** For a Summer/Godot game, export a Windows executable build, a Linux build, and/or a macOS `.app` bundle.
-2. **Package it as an archive.** Supported formats are `.zip`, `.tar.gz`, and `.tgz`.
-   - Windows: a `.zip` with the `.exe` and its data files.
-   - Linux: a `.tar.gz` (or `.zip`) with the executable bit preserved.
+2. **Package it.** Supported formats are `.zip`, `.tar.gz`, `.tgz`, a portable Windows `.exe`, or a Linux `.AppImage`.
+   - Windows: a `.zip` with the `.exe` and its data files, or one self-contained portable `.exe`.
+   - Linux: a `.tar.gz` (or `.zip`) with the executable bit preserved, or an `.AppImage`.
    - macOS: a `.zip` containing the `.app` bundle. The launcher reads `Contents/Info.plist` to find the bundle executable.
 3. **Publish a GitHub Release.** Use a version tag such as `v1.2.0`. Drafts are ignored; prereleases are ignored unless `includePrereleases` is enabled.
-4. **Attach the archives** as release assets. Asset names should identify the platform and architecture, for example:
+4. **Attach the builds** as release assets. Asset names should identify the platform and architecture, for example:
    - `HollowSignal-win64.zip`
    - `HollowSignal-linux-x86_64.tar.gz`
    - `HollowSignal-macos-universal.zip`
+   - `HollowSignal-portable.exe`
 5. **Add the product to the relay catalog** and redeploy the relay.
 6. In the launcher, refresh the catalog. Users can install or update from there.
 
@@ -133,19 +134,19 @@ Then open `http://localhost:5174`.
 | `tags` | no | Up to eight display tags. Falls back to repository topics. |
 | `featured` | no | Picks the large hero card in the catalog (the first featured ready product). |
 | `includePrereleases` | no | Uses the newest non-draft prerelease too. Default `false`. |
-| `platforms` | no | Per-OS asset rules. If omitted, the relay auto-detects archives from their names. |
+| `platforms` | no | Per-OS asset rules. If omitted, the relay auto-detects archives and portable executables from their names. |
 
 Each platform rule supports:
 
-- `asset` — a case-insensitive glob such as `*win64*.zip`. If several assets match, the relay prefers the product's main build over symbols, PDBs, checksums, and tooling archives.
-- `executable` — optional path inside the archive. This is the most reliable way to launch. If omitted, the launcher scores likely executables (and reads macOS app bundles).
+- `asset` — a case-insensitive glob such as `*win64*.zip` or `*Portable*.exe`. If several assets match, the relay prefers the product's main build over symbols, PDBs, checksums, and tooling archives.
+- `executable` — optional path inside the archive. This is the most reliable way to launch. If omitted, the launcher scores likely executables (and reads macOS app bundles). For a single-file executable, omit it and the launcher uses the downloaded file.
 - `args` — optional array of launch arguments.
 
-When `platforms` is present, only those platforms are offered. Without it, the relay offers an archive on every platform unless asset names clearly identify a different OS. A single unnamed archive is treated as universal.
+When `platforms` is present, only those platforms are offered. Without it, the relay offers an archive on every platform unless asset names clearly identify a different OS. A single unnamed archive is treated as universal. A raw `.exe` is only offered on Windows, and a raw `.AppImage` is only offered on Linux.
 
 Supported asset selection details:
 
-- The relay only considers `.zip`, `.tar.gz`, and `.tgz` assets.
+- The relay considers `.zip`, `.tar.gz`, `.tgz`, portable `.exe` (Windows), and `.AppImage` (Linux) assets. Archives are preferred when a release offers both.
 - Cross-platform asset names are not arch-aware beyond the glob you write. Use explicit patterns such as `*win64*.zip` when a release contains multiple architectures.
 - GitHub's sha256 asset digest is passed to the launcher when GitHub provides one; the launcher verifies it after download.
 
@@ -226,10 +227,10 @@ Changing the install folder does not move existing installs.
 ## How installs and updates work
 
 1. The launcher asks the relay for the catalog for the current platform.
-2. The relay resolves `releases/latest` (or the newest prerelease), selects an archive, and returns the asset metadata.
+2. The relay resolves `releases/latest` (or the newest prerelease), selects a build, and returns the asset metadata.
 3. The launcher downloads the asset to a temporary folder inside the library. Public assets come directly from GitHub; private assets are streamed by the relay.
 4. The SHA-256 digest is verified when GitHub supplied one.
-5. The archive is extracted into a staging folder with path-traversal protection.
+5. Archives are extracted into a staging folder with path-traversal protection; a single-file executable is moved into the staging folder as-is.
 6. The launcher detects or uses the configured executable.
 7. The previous `app/` folder is moved aside, the staging folder becomes the new `app/`, the manifest is written, and the previous version is removed. If anything fails, the previous version is restored.
 8. The app is launched detached, so closing the launcher does not close the game.
@@ -241,7 +242,7 @@ On startup the launcher repairs interrupted updates, restores a previous `app/` 
 
 - The Electron renderer is sandboxed with context isolation, no Node integration, a restricted preload bridge, and a content security policy.
 - Downloads are limited to GitHub hosts and the configured relay. Checksums are verified when available. Archive paths and install/manifest paths are checked against traversal.
-- The launcher executes programs from release archives. Treat write access to the catalog repositories and the relay as code-execution trust.
+- The launcher executes programs from release assets. Treat write access to the catalog repositories and the relay as code-execution trust.
 - **The relay has no user authentication yet.** Its catalog endpoints are public. If you give the relay a token that can read private repositories, anyone who discovers the relay URL can list those products and request their assets through `/api/download`. Keep the deployed catalog public-only until SSO/profiles/entitlements exist, or put the relay behind your own access control.
 - GitHub tokens stay on the relay and are never sent to the launcher.
 - Release notes and metadata are rendered as text, not HTML.
@@ -251,7 +252,7 @@ On startup the launcher repairs interrupted updates, restores a previous `app/` 
 - No accounts, profiles, SSO, game keys, or per-user entitlements yet.
 - No launcher self-update yet. Product updates are supported; shipping launcher updates is the next layer (electron-updater or a release feed).
 - No resumable downloads, delta updates, or parallel chunking.
-- No 7z/DMG/MSI installation; archives only.
+- No 7z, DMG, or MSI installation. Supported formats are archives, portable Windows `.exe`, and Linux `.AppImage`.
 - No code signing on Windows or notarization on macOS. Users may see SmartScreen/Gatekeeper warnings; production distribution needs signing.
 - No custom application icon is wired into electron-builder yet (the renderer uses the MCM98 mark).
 - The relay cache is in memory and resets on redeploy.
@@ -287,8 +288,9 @@ It opens a hidden window, checks that the preload bridge exists and the React UI
 
 - **"The relay is not answering"** — confirm the Render service is awake and the URL in Settings is exactly the service URL, with no trailing path. Free instances can take up to a minute to wake.
 - **"Repository not found, or it is private..."** — set `GITHUB_TOKEN` on the relay. For public repositories, also confirm `repo` is `owner/name` and the release is published (not a draft).
-- **"No installable archive"** — attach a `.zip`, `.tar.gz`, or `.tgz`; adjust the platform `asset` glob.
+- **"No installable build"** — attach a `.zip`, `.tar.gz`, `.tgz`, portable `.exe` (Windows), or `.AppImage` (Linux); adjust the platform `asset` glob. If the release is a prerelease, set `includePrereleases: true`.
 - **"No runnable executable was found"** — set `platforms.<os>.executable` to the path inside the archive and republish.
+- **Windows SmartScreen warning** — the installer and product builds are unsigned. Use **More info → Run anyway** for your own builds, or sign them for distribution.
 - **Update fails with an access/busy error** — close the product and any related background process, then retry.
 - **Relay port already in use locally** — run `PORT=8791 npm --prefix server run dev` and update the Settings URL to `http://localhost:8791`.
 - **GitHub rate limit** — add `GITHUB_TOKEN` to the relay or raise `CACHE_TTL_SECONDS`.

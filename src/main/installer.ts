@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { readdir, rename } from 'node:fs/promises'
+import { chmod, readdir, rename } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import type {
   InstallPhase,
@@ -24,8 +24,21 @@ import {
 import type { Logger } from './logger'
 
 const MAX_CONCURRENT_INSTALLS = 2
-const MAX_ARCHIVE_BYTES = 16 * 1024 * 1024 * 1024
-const SUPPORTED_ARCHIVE = /\.(zip|tar\.gz|tgz)$/i
+const MAX_ASSET_BYTES = 16 * 1024 * 1024 * 1024
+const ARCHIVE_ASSET = /\.(zip|tar\.gz|tgz)$/i
+
+function isDirectExecutable(assetName: string, platform: Platform): boolean {
+  if (platform === 'win32') return /\.exe$/i.test(assetName)
+  if (platform === 'linux') return /\.appimage$/i.test(assetName)
+  return false
+}
+
+function supportedAssets(platform: Platform): string {
+  const archives = '.zip, .tar.gz, or .tgz archives'
+  if (platform === 'win32') return `${archives}, or a portable .exe`
+  if (platform === 'linux') return `${archives}, or an .AppImage`
+  return archives
+}
 const URL_HOST_ALLOWLIST = new Set([
   'github.com',
   'api.github.com',
@@ -254,18 +267,31 @@ export class InstallManager {
 
       if (signal.aborted) throw new AbortError()
 
-      task.phase = 'extracting'
-      task.message = 'Extracting'
-      this.broadcast(true)
+      if (isDirectExecutable(request.assetName, this.platform)) {
+        task.phase = 'finalizing'
+        task.message = 'Preparing application'
+        this.broadcast(true)
 
-      await extractArchive(downloadPath, stagingDir, request.assetName, {
-        signal,
-        logger: this.log,
-        onEntry: (count) => {
-          task.message = `Extracting (${count} file${count === 1 ? '' : 's'})`
-          this.broadcast()
+        await ensureDir(stagingDir)
+        const target = join(stagingDir, basename(request.assetName))
+        await rename(downloadPath, target)
+        if (this.platform !== 'win32') {
+          await chmod(target, 0o755)
         }
-      })
+      } else {
+        task.phase = 'extracting'
+        task.message = 'Extracting'
+        this.broadcast(true)
+
+        await extractArchive(downloadPath, stagingDir, request.assetName, {
+          signal,
+          logger: this.log,
+          onEntry: (count) => {
+            task.message = `Extracting (${count} file${count === 1 ? '' : 's'})`
+            this.broadcast()
+          }
+        })
+      }
 
       if (signal.aborted) throw new AbortError()
 
@@ -434,12 +460,12 @@ export class InstallManager {
     }
 
     const assetName = basename(cleanText(raw.assetName, 240))
-    if (!SUPPORTED_ARCHIVE.test(assetName)) {
-      throw new Error('Only .zip, .tar.gz, and .tgz release assets can be installed.')
+    if (!ARCHIVE_ASSET.test(assetName) && !isDirectExecutable(assetName, this.platform)) {
+      throw new Error(`Only ${supportedAssets(this.platform)} can be installed.`)
     }
 
     const sizeBytes = Number(raw.sizeBytes)
-    if (!Number.isFinite(sizeBytes) || sizeBytes < 0 || sizeBytes > MAX_ARCHIVE_BYTES) {
+    if (!Number.isFinite(sizeBytes) || sizeBytes < 0 || sizeBytes > MAX_ASSET_BYTES) {
       throw new Error('The release asset size is invalid.')
     }
 

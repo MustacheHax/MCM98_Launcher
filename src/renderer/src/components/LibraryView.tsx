@@ -114,7 +114,7 @@ export function LibraryView(): JSX.Element {
         <EmptyState
           icon="library"
           title="Your library is empty"
-          description="Install a game or app from the catalog. Builds are unpacked into your local library and launched without a browser."
+          description="Install a game or app from the catalog. Builds are installed into your local library and launched without a browser."
           action={
             <button className="btn btn-primary" onClick={() => navigate('catalog')}>
               <Icon name="catalog" size={15} />

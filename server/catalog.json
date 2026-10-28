@@ -1,16 +1,16 @@
 {
   "products": [
     {
-      "id": "StreamFriend",
+      "id": "weiner-stream",
       "name": "WeinerStream",
       "repo": "MustacheHax/StreamFriend",
       "summary": "A video sharing app for our friendliest friends.",
       "tags": ["app"],
       "featured": true,
+      "includePrereleases": true,
       "platforms": {
         "win32": {
-          "asset": "*win*.zip",
-          "executable": "WienerStream-0.1.2.exe"
+          "asset": "*WienerStream*.exe"
         }
       }
     }

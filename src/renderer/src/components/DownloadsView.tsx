@@ -33,7 +33,7 @@ export function DownloadsView(): JSX.Element {
       <PageHeader
         eyebrow="Transfer queue"
         title="Downloads"
-        description="Release assets are downloaded, checked against GitHub's checksum, then unpacked into your library."
+        description="Release assets are downloaded, checked against GitHub's checksum, then installed into your library."
         actions={
           <button
             className="btn btn-ghost"
