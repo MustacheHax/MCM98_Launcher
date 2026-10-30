@@ -4,6 +4,7 @@
  * without a shared runtime package.
  */
 
+import type { TextSize } from './textSize'
 import type { ThemeId } from './themes'
 
 export type Platform = 'win32' | 'linux' | 'darwin'
@@ -146,6 +147,8 @@ export interface LauncherConfig {
   installRoot: string
   /** Selected appearance theme. */
   theme: ThemeId
+  /** Launcher text size; scales type without resizing the window. */
+  textSize: TextSize
   /** Window density: the compact Paradox-style shell or the full layout. */
   layout: LauncherLayout
   /** View shown the next time the launcher opens. */

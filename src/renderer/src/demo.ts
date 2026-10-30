@@ -205,9 +205,10 @@ const wait = (ms: number): Promise<void> => new Promise((resolve) => window.setT
 
 export function createDemoApi(): LauncherApi {
   let config: LauncherConfig = {
-    backendUrl: 'https://mcm98-launcher-api.onrender.com',
+    backendUrl: 'https://mcm98-launcher.onrender.com',
     installRoot: DEMO_LIBRARY_ROOT,
-    theme: 'modern-dark',
+    theme: 'graf-dark',
+    textSize: 'default',
     layout: 'compact',
     startView: 'library',
     showSplash: true,
@@ -366,6 +367,7 @@ export function createDemoApi(): LauncherApi {
         backendUrl: patch.backendUrl?.trim() || config.backendUrl,
         installRoot: patch.installRoot?.trim() || config.installRoot,
         theme: patch.theme ?? config.theme,
+        textSize: patch.textSize ?? config.textSize,
         layout: patch.layout ?? config.layout,
         startView: patch.startView ?? config.startView,
         showSplash: patch.showSplash ?? config.showSplash,

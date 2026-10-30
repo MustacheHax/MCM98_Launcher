@@ -11,6 +11,7 @@ import {
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { IPC } from '@shared/channels'
+import { isTextSize } from '@shared/textSize'
 import { isThemeId, themeMode } from '@shared/themes'
 import type {
   AppInfo,
@@ -233,6 +234,7 @@ function registerIpc(): void {
       if (typeof input?.backendUrl === 'string') patch.backendUrl = input.backendUrl
       if (typeof input?.installRoot === 'string') patch.installRoot = input.installRoot
       if (isThemeId(input?.theme)) patch.theme = input.theme
+      if (isTextSize(input?.textSize)) patch.textSize = input.textSize
       if (isLauncherLayout(input?.layout)) patch.layout = input.layout
       if (isLaunchView(input?.startView)) patch.startView = input.startView
       if (typeof input?.showSplash === 'boolean') patch.showSplash = input.showSplash
@@ -457,10 +459,19 @@ async function createWindow(): Promise<void> {
               ({
                 bridge: Boolean(window.launcher),
                 rootChildren: document.getElementById('root')?.childElementCount ?? 0,
-                relay: (document.querySelector('.relay-card')?.innerText || '').replace(/\\s+/g, ' ').trim(),
+                relay: (document.querySelector('.statusbar')?.innerText || '').replace(/\\s+/g, ' ').trim(),
+                theme: document.documentElement.dataset.theme || '',
+                textSize: document.documentElement.dataset.textSize || '',
                 text: (document.body.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 180)
               })
-            `)) as { bridge: boolean; rootChildren: number; relay: string; text: string }
+            `)) as {
+              bridge: boolean
+              rootChildren: number
+              relay: string
+              theme: string
+              textSize: string
+              text: string
+            }
 
             if (!result.bridge || result.rootChildren === 0) {
               logger.error(`[smoke] renderer did not initialize: ${JSON.stringify(result)}`)

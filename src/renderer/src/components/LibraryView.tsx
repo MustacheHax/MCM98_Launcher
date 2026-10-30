@@ -12,6 +12,7 @@ import { PageHeader } from './PageHeader'
 import { Cover } from './Cover'
 import { Icon } from './Icons'
 import { EmptyState } from './EmptyState'
+import { WhatsNewCard } from './WhatsNewCard'
 
 export function LibraryView(): JSX.Element {
   const {
@@ -68,6 +69,8 @@ export function LibraryView(): JSX.Element {
           </div>
         }
       />
+
+      <WhatsNewCard />
 
       {library.length > 0 && (
         <div className="stat-row">

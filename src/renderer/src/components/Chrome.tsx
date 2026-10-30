@@ -9,15 +9,6 @@ const NAV_ITEMS: Array<{ view: View; label: string; icon: IconName }> = [
   { view: 'settings', label: 'Settings', icon: 'settings' }
 ]
 
-function hostFromUrl(value: string | undefined): string {
-  if (!value) return 'Not configured'
-  try {
-    return new URL(value).host
-  } catch {
-    return value
-  }
-}
-
 export function TitleBar(): JSX.Element {
   const { appInfo, demoMode } = useApp()
   return (
@@ -36,38 +27,9 @@ export function TitleBar(): JSX.Element {
 }
 
 export function Sidebar(): JSX.Element {
-  const {
-    view,
-    navigate,
-    library,
-    tasks,
-    catalog,
-    catalogError,
-    catalogLoading,
-    config,
-    appInfo,
-    launcherUpdate,
-    demoMode
-  } = useApp()
+  const { view, navigate, library, tasks, launcherUpdate } = useApp()
 
   const activeDownloads = tasks.filter((task) => !isTerminalPhase(task.phase)).length
-  const relayState = catalogError
-    ? 'offline'
-    : catalogLoading
-      ? 'connecting'
-      : catalog
-        ? 'online'
-        : 'idle'
-  const relayLabel =
-    relayState === 'offline'
-      ? 'Relay unavailable'
-      : relayState === 'connecting'
-        ? 'Contacting relay'
-        : relayState === 'online'
-          ? demoMode
-            ? 'Demo session'
-            : 'Relay online'
-          : 'Relay idle'
 
   return (
     <aside className="sidebar">
@@ -118,27 +80,6 @@ export function Sidebar(): JSX.Element {
         </button>
       )}
 
-      <div className="relay-card">
-        <div className="relay-card-top">
-          <span className={`status-dot ${relayState}`} />
-          <span>{relayLabel}</span>
-        </div>
-        <div className="relay-host" title={config?.backendUrl}>
-          {demoMode ? 'Browser preview' : hostFromUrl(config?.backendUrl)}
-        </div>
-        <div className="relay-note">
-          {relayState === 'offline'
-            ? 'Check the relay URL in Settings.'
-            : demoMode
-              ? 'Sample products and simulated installs.'
-              : 'Releases come from GitHub; the relay only resolves them.'}
-        </div>
-      </div>
-
-      <div className="sidebar-foot">
-        <span>MCM98 Launcher</span>
-        <span className="mono">v{appInfo?.version ?? '0.3.0'}</span>
-      </div>
     </aside>
   )
 }

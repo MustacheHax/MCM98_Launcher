@@ -8,7 +8,8 @@ const FAMILY_LABEL: Record<string, string> = {
   retro: '90s Retro',
   bubbly: 'Bubbly',
   rocker: 'Rocker',
-  ghost: 'Ghost'
+  ghost: 'Ghost',
+  graf: 'Graffiti'
 }
 
 export function ThemePicker(): JSX.Element {
@@ -64,7 +65,9 @@ export function ThemePicker(): JSX.Element {
                           ? 'TURN IT UP'
                           : item.family === 'ghost'
                             ? 'Still here'
-                            : 'Library'}
+                            : item.family === 'graf'
+                              ? 'Paint it loud'
+                              : 'Library'}
                   </span>
                   <span className="theme-preview-line" />
                   <span className="theme-preview-line is-short" />

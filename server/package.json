@@ -1,6 +1,6 @@
 {
   "name": "mcm98-launcher-api",
-  "version": "0.3.0",
+  "version": "0.3.4",
   "private": true,
   "description": "Catalog and release relay for the MCM98 Launcher",
   "type": "module",

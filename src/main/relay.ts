@@ -163,7 +163,13 @@ export async function fetchCatalog(
   log: Logger
 ): Promise<CatalogResponse> {
   const url = joinUrl(config.backendUrl, `/api/catalog?platform=${encodeURIComponent(platform)}`)
-  const payload = await requestJson<unknown>(url, log)
+  // A sleeping Render service can take close to a minute to wake on first boot.
+  // Wait through that instead of reporting the relay as offline right away.
+  const payload = await requestJson<unknown>(url, log, {
+    attempts: 2,
+    timeoutMs: 60_000,
+    retryDelayMs: 2_000
+  })
   assertCatalog(payload)
   return payload
 }
@@ -190,7 +196,7 @@ export async function checkBackend(
   const normalized = backendUrl.replace(/\/+$/, '')
   const payload = await requestJson<unknown>(joinUrl(normalized, '/api/health'), log, {
     attempts: 1,
-    timeoutMs: 20_000
+    timeoutMs: 60_000
   })
   assertHealth(payload)
   return payload

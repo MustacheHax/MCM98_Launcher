@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { TEXT_SIZE_OPTIONS } from '@shared/textSize'
 import type { HealthResponse, LauncherConfig } from '@shared/types'
 import { errorMessage, getLauncher } from '../api'
 import { useApp } from '../state'
@@ -506,6 +507,46 @@ export function SettingsView(): JSX.Element {
 
           {tab === 'appearance' && (
             <div className="settings-stack">
+              <section className="panel settings-panel">
+                <div className="panel-heading">
+                  <span className="panel-icon">
+                    <Icon name="monitor" size={18} />
+                  </span>
+                  <div>
+                    <h2>Text size</h2>
+                    <p>
+                      Scale the launcher's text without resizing the window. Buttons, panels, and
+                      the icon rail keep their bounds, so the layout never spills out of place.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-size-row">
+                  <div className="segmented" role="radiogroup" aria-label="Text size">
+                    {TEXT_SIZE_OPTIONS.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={(config?.textSize ?? 'default') === option.id}
+                        className={`segmented-option ${
+                          (config?.textSize ?? 'default') === option.id ? 'is-active' : ''
+                        }`}
+                        disabled={prefsDisabled}
+                        title={option.hint}
+                        onClick={() => void updatePreference('textSize', { textSize: option.id })}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-size-note">
+                    {TEXT_SIZE_OPTIONS.find((option) => option.id === (config?.textSize ?? 'default'))
+                      ?.hint ?? 'Default is a little larger for everyday reading.'}
+                  </p>
+                </div>
+              </section>
+
               <section className="panel settings-panel appearance-panel">
                 <div className="panel-heading">
                   <span className="panel-icon">
@@ -514,7 +555,7 @@ export function SettingsView(): JSX.Element {
                   <div>
                     <h2>Theme family</h2>
                     <p>
-                      Ten complete themes, not just palettes. Typography, corners, borders, and
+                      Twelve complete themes, not just palettes. Typography, corners, borders, and
                       textures change with each family. Your choice is saved to this machine.
                     </p>
                   </div>

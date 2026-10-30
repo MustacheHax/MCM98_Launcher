@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { DEFAULT_TEXT_SIZE, isTextSize, type TextSize } from '@shared/textSize'
 import { DEFAULT_THEME, isThemeId, themeMode, type ThemeId } from '@shared/themes'
 import type {
   AppInfo,
@@ -15,6 +16,7 @@ import { errorMessage, demoMode, getLauncher } from './api'
 import { AppContext, type ToastKind, type View } from './state'
 import { isTerminalPhase } from './utils'
 import { Sidebar, TitleBar } from './components/Chrome'
+import { StatusBar } from './components/StatusBar'
 import { CatalogView } from './components/CatalogView'
 import { LibraryView } from './components/LibraryView'
 import { DownloadsView } from './components/DownloadsView'
@@ -66,6 +68,14 @@ function App(): JSX.Element {
       return DEFAULT_THEME
     }
   })
+  const [textSize, setTextSizeState] = useState<TextSize>(() => {
+    try {
+      const cached = window.localStorage.getItem('mcm98.textSize')
+      return isTextSize(cached) ? cached : DEFAULT_TEXT_SIZE
+    } catch {
+      return DEFAULT_TEXT_SIZE
+    }
+  })
   const [layout, setLayoutState] = useState<LauncherConfig['layout']>(() => {
     try {
       return window.localStorage.getItem('mcm98.layout') === 'full' ? 'full' : 'compact'
@@ -96,6 +106,19 @@ function App(): JSX.Element {
   useEffect(() => {
     if (config?.theme) setThemeState(config.theme)
   }, [config?.theme])
+
+  useEffect(() => {
+    if (config?.textSize) setTextSizeState(config.textSize)
+  }, [config?.textSize])
+
+  useEffect(() => {
+    document.documentElement.dataset.textSize = textSize
+    try {
+      window.localStorage.setItem('mcm98.textSize', textSize)
+    } catch {
+      // The saved config still wins when storage is unavailable.
+    }
+  }, [textSize])
 
   useEffect(() => {
     if (config) setLayoutState(config.layout)
@@ -565,6 +588,7 @@ function App(): JSX.Element {
             {view === 'settings' && <SettingsView />}
           </main>
         </div>
+        <StatusBar />
 
         {selected && <ProductDrawer />}
 

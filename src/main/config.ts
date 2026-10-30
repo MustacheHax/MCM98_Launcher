@@ -7,12 +7,30 @@ import {
   writeFileSync
 } from 'node:fs'
 import { join, parse, resolve } from 'node:path'
+import { DEFAULT_TEXT_SIZE, isTextSize } from '@shared/textSize'
 import { DEFAULT_THEME, isThemeId } from '@shared/themes'
 import type { LaunchView, LauncherConfig, LauncherLayout } from '@shared/types'
 import type { Logger } from './logger'
 
-const DEFAULT_BACKEND =
-  (import.meta.env.MAIN_VITE_BACKEND_URL ?? '').trim() || 'http://localhost:8790'
+/** Relay used by packaged builds when nothing else is configured. */
+const HOSTED_BACKEND = 'https://mcm98-launcher.onrender.com'
+/** Local relay started by `npm run dev`; never the default for users. */
+const LOCAL_BACKEND = 'http://localhost:8790'
+/** Build-time override, for a self-hosted relay. */
+const BUILD_BACKEND = (import.meta.env.MAIN_VITE_BACKEND_URL ?? '').trim()
+
+const DEFAULT_BACKEND = BUILD_BACKEND || (app.isPackaged ? HOSTED_BACKEND : LOCAL_BACKEND)
+
+/**
+ * Addresses written by builds that shipped without a production relay. On a
+ * user's machine nothing answers on those ports, so packaged installs are
+ * moved to the real default once. A URL typed in Settings is never rewritten.
+ */
+const LEGACY_DEFAULT_BACKENDS = new Set([
+  'http://localhost:8790',
+  'http://localhost',
+  'http://127.0.0.1:8790'
+])
 
 const LAYOUTS: LauncherLayout[] = ['compact', 'full']
 const START_VIEWS: LaunchView[] = ['library', 'catalog', 'downloads']
@@ -29,6 +47,7 @@ interface StoredConfig {
   backendUrl?: unknown
   installRoot?: unknown
   theme?: unknown
+  textSize?: unknown
   layout?: unknown
   startView?: unknown
   showSplash?: unknown
@@ -58,6 +77,7 @@ export class ConfigStore {
       backendUrl: normalizeBackendUrl(DEFAULT_BACKEND),
       installRoot: join(this.dataRoot, 'Library'),
       theme: DEFAULT_THEME,
+      textSize: DEFAULT_TEXT_SIZE,
       layout: 'compact',
       startView: 'library',
       showSplash: true,
@@ -68,6 +88,26 @@ export class ConfigStore {
       confirmUninstall: true
     }
     this.current = this.load(defaults)
+    this.migrateLegacyBackend(defaults.backendUrl)
+  }
+
+  /**
+   * Earlier builds stored the development relay. A packaged launcher should
+   * talk to the hosted relay instead, so upgrade that one value and persist it.
+   */
+  private migrateLegacyBackend(fallback: string): void {
+    const previous = this.current.backendUrl
+    if (!app.isPackaged || previous === fallback || !LEGACY_DEFAULT_BACKENDS.has(previous)) {
+      return
+    }
+
+    this.current = { ...this.current, backendUrl: fallback }
+    try {
+      this.persist(this.current)
+      this.log.info(`Relay URL upgraded from ${previous} to ${fallback}.`)
+    } catch (error) {
+      this.log.warn('Could not save the upgraded relay URL; using it for this session only.', error)
+    }
   }
 
   private load(defaults: LauncherConfig): LauncherConfig {
@@ -82,11 +122,13 @@ export class ConfigStore {
       const installRoot =
         typeof stored.installRoot === 'string' ? tryNormalizeInstallRoot(stored.installRoot) : null
       const theme = isThemeId(stored.theme) ? stored.theme : defaults.theme
+      const textSize = isTextSize(stored.textSize) ? stored.textSize : defaults.textSize
 
       const config: LauncherConfig = {
         backendUrl: backendUrl ?? defaults.backendUrl,
         installRoot: installRoot ?? defaults.installRoot,
         theme,
+        textSize,
         layout: isLauncherLayout(stored.layout) ? stored.layout : defaults.layout,
         startView: isLaunchView(stored.startView) ? stored.startView : defaults.startView,
         showSplash: storedBoolean(stored.showSplash, defaults.showSplash),
@@ -96,7 +138,12 @@ export class ConfigStore {
         autoCheckProducts: storedBoolean(stored.autoCheckProducts, defaults.autoCheckProducts),
         confirmUninstall: storedBoolean(stored.confirmUninstall, defaults.confirmUninstall)
       }
-      if (!backendUrl || !installRoot || (stored.theme !== undefined && !isThemeId(stored.theme))) {
+      if (
+        !backendUrl ||
+        !installRoot ||
+        (stored.theme !== undefined && !isThemeId(stored.theme)) ||
+        (stored.textSize !== undefined && !isTextSize(stored.textSize))
+      ) {
         this.log.warn('Some saved launcher settings were invalid; defaults were applied.')
       }
       return config
@@ -126,6 +173,7 @@ export class ConfigStore {
           ? this.current.installRoot
           : normalizeInstallRoot(patch.installRoot),
       theme: isThemeId(patch.theme) ? patch.theme : this.current.theme,
+      textSize: isTextSize(patch.textSize) ? patch.textSize : this.current.textSize,
       layout: isLauncherLayout(patch.layout) ? patch.layout : this.current.layout,
       startView: isLaunchView(patch.startView) ? patch.startView : this.current.startView,
       showSplash:
@@ -150,19 +198,24 @@ export class ConfigStore {
           : this.current.confirmUninstall
     }
 
-    mkdirSync(next.installRoot, { recursive: true })
-    mkdirSync(this.dataRoot, { recursive: true })
-    const tempPath = `${this.configPath}.tmp`
-    writeFileSync(tempPath, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
-    renameSync(tempPath, this.configPath)
+    this.persist(next)
     this.current = next
     this.log.info('Launcher settings updated.', {
       backendUrl: next.backendUrl,
       installRoot: next.installRoot,
       theme: next.theme,
+      textSize: next.textSize,
       layout: next.layout
     })
     return this.get()
+  }
+
+  private persist(config: LauncherConfig): void {
+    mkdirSync(config.installRoot, { recursive: true })
+    mkdirSync(this.dataRoot, { recursive: true })
+    const tempPath = `${this.configPath}.tmp`
+    writeFileSync(tempPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8')
+    renameSync(tempPath, this.configPath)
   }
 }
 

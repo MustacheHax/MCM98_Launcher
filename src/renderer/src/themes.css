@@ -3,6 +3,81 @@
 /* Families change typography, geometry, texture, and control styling. */
 /* ================================================================== */
 
+/* Graffiti: the wordmark's cyan, magenta, and orange over ink or paper. */
+[data-theme="graf-dark"] {
+  color-scheme: dark;
+  --bg: #0a0b10;
+  --bg-elevated: #0d0f16;
+  --panel: #11141d;
+  --panel-2: #171b26;
+  --panel-hover: #1f2433;
+  --line: rgba(255, 255, 255, 0.085);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --text: #f6f7fb;
+  --text-soft: #cdd3e0;
+  --muted: #969fb2;
+  --dim: #6b7486;
+  --accent: #ff3f9a;
+  --accent-rgb: 255, 63, 154;
+  --accent-soft: rgba(255, 63, 154, 0.14);
+  --accent-ink: #17020c;
+  --accent-hover: #ff62ad;
+  --danger: #ff6b6b;
+  --warn: #ffc247;
+  --ok: #4fe3a1;
+  --blue: #35d6ef;
+  --titlebar-bg: rgba(10, 11, 16, 0.82);
+  --hover-bg: rgba(255, 255, 255, 0.05);
+  --drawer-bg: #0c0e15;
+  --modal-bg: #12151e;
+  --toast-bg: #141823;
+  --hero-accent: #ffb238;
+  --radius: 9px;
+  --radius-lg: 14px;
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", Inter, system-ui, sans-serif;
+  --font-display: "Arial Black", "Segoe UI Black", "Segoe UI Variable Display", "Segoe UI",
+    system-ui, sans-serif;
+  --font-mono: "Cascadia Code", "Cascadia Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+    monospace;
+}
+
+[data-theme="graf-light"] {
+  color-scheme: light;
+  --bg: #f4f2ec;
+  --bg-elevated: #fbfaf6;
+  --panel: #ffffff;
+  --panel-2: #f3f1ea;
+  --panel-hover: #e9e6dd;
+  --line: rgba(20, 18, 26, 0.09);
+  --line-strong: rgba(20, 18, 26, 0.18);
+  --text: #14131a;
+  --text-soft: #3c3a46;
+  --muted: #625f6d;
+  --dim: #8b8795;
+  --accent: #c4147e;
+  --accent-rgb: 196, 20, 126;
+  --accent-soft: rgba(196, 20, 126, 0.1);
+  --accent-ink: #ffffff;
+  --accent-hover: #dc1a8f;
+  --danger: #b3261e;
+  --warn: #8a5600;
+  --ok: #16704a;
+  --blue: #0a7f96;
+  --titlebar-bg: rgba(252, 250, 245, 0.82);
+  --hover-bg: rgba(20, 18, 26, 0.05);
+  --drawer-bg: #fbfaf6;
+  --modal-bg: #ffffff;
+  --toast-bg: #ffffff;
+  --hero-accent: #ffc247;
+  --radius: 9px;
+  --radius-lg: 14px;
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", Inter, system-ui, sans-serif;
+  --font-display: "Arial Black", "Segoe UI Black", "Segoe UI Variable Display", "Segoe UI",
+    system-ui, sans-serif;
+  --font-mono: "Cascadia Code", "Cascadia Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+    monospace;
+}
+
 [data-theme="modern-dark"] {
   color-scheme: dark;
   --bg: #07080b;
@@ -427,7 +502,7 @@
   color: var(--text);
   box-shadow: none;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--text-scale));
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -458,7 +533,7 @@
   border-radius: 0;
   border: 1px solid transparent;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--text-scale));
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -623,7 +698,7 @@
 
 [data-theme^="rocker"] .brand-word {
   font-family: var(--font-display);
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale));
   font-style: italic;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -711,7 +786,7 @@
 
 [data-theme^="rocker"] .nav-item {
   border-radius: 1px;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--text-scale));
   font-style: italic;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -821,6 +896,123 @@
 
 [data-theme^="ghost"] .theme-card {
   border-radius: 8px;
+}
+
+/* Graffiti: gradient rules, poster headings, and a spray of colour behind the shell. */
+[data-theme^="graf"] .app {
+  background:
+    radial-gradient(900px 540px at 84% -14%, rgba(53, 214, 239, 0.14), transparent 62%),
+    radial-gradient(760px 500px at 58% -6%, rgba(var(--accent-rgb), 0.17), transparent 60%),
+    radial-gradient(900px 640px at 4% 112%, rgba(255, 154, 47, 0.13), transparent 64%),
+    var(--bg);
+}
+
+[data-theme^="graf"] .titlebar {
+  position: relative;
+  border-bottom-color: transparent;
+}
+
+[data-theme^="graf"] .titlebar::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--blue), var(--accent) 52%, #ff9b2f);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+[data-theme^="graf"] .sidebar {
+  background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.035), transparent 42%);
+}
+
+[data-theme^="graf"] .page-head h1 {
+  font-weight: 900;
+  letter-spacing: -0.025em;
+  background: linear-gradient(94deg, var(--text) 22%, var(--accent) 74%, #ff9b2f);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+[data-theme="graf-light"] .page-head h1 {
+  background-image: linear-gradient(94deg, var(--text) 32%, var(--accent));
+}
+
+[data-theme^="graf"] .hero h2,
+[data-theme^="graf"] .card-title h3,
+[data-theme^="graf"] .lib-title,
+[data-theme^="graf"] .section-heading h2,
+[data-theme^="graf"] .section-heading h3 {
+  letter-spacing: -0.02em;
+  font-weight: 900;
+}
+
+[data-theme^="graf"] .nav-item.active {
+  border-color: rgba(var(--accent-rgb), 0.22);
+  background: linear-gradient(
+    90deg,
+    rgba(var(--accent-rgb), 0.15),
+    rgba(53, 214, 239, 0.06) 62%,
+    transparent
+  );
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+[data-theme^="graf"] .btn-primary {
+  border-color: transparent;
+  background: linear-gradient(100deg, var(--accent), var(--blue));
+  color: var(--accent-ink);
+  box-shadow: 0 10px 24px rgba(var(--accent-rgb), 0.18);
+}
+
+[data-theme^="graf"] .btn-primary:hover:not(:disabled) {
+  border-color: transparent;
+  background: linear-gradient(100deg, var(--accent-hover), var(--blue));
+  color: var(--accent-ink);
+}
+
+[data-theme^="graf"] .tag,
+[data-theme^="graf"] .chip {
+  border-radius: 4px;
+}
+
+[data-theme^="graf"] .chip-accent,
+[data-theme^="graf"] .update-banner-badge {
+  background: linear-gradient(100deg, var(--accent-soft), rgba(53, 214, 239, 0.1));
+  border-color: rgba(var(--accent-rgb), 0.28);
+  color: var(--accent);
+}
+
+[data-theme^="graf"] .product-card:hover {
+  transform: translateY(-4px) rotate(-0.3deg);
+}
+
+[data-theme^="graf"] .theme-card.is-active {
+  box-shadow: 0 0 0 1px var(--accent), 0 8px 22px rgba(var(--accent-rgb), 0.14);
+}
+
+[data-theme^="graf"] .settings-tab.is-active {
+  background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.14), rgba(53, 214, 239, 0.05));
+  border-color: rgba(var(--accent-rgb), 0.22);
+}
+
+[data-theme^="graf"] .cover-orb {
+  filter: blur(26px);
+  opacity: 0.9;
+}
+
+.theme-preview[data-theme^="graf"] .theme-preview-title {
+  font-family: var(--font-display);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+.theme-preview[data-theme^="graf"] .theme-preview-button {
+  background: linear-gradient(100deg, var(--accent), var(--blue));
+  color: var(--accent-ink);
 }
 
 /* Light themes: cover art and the hero stay dark, so their text must too. */
@@ -1028,7 +1220,7 @@
 
 .theme-preview-kicker {
   color: var(--accent);
-  font-size: 5px;
+  font-size: calc(5px * var(--text-scale));
   font-weight: 800;
   letter-spacing: 0.14em;
 }
@@ -1036,7 +1228,7 @@
 .theme-preview-title {
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: calc(11px * var(--text-scale));
   font-weight: 700;
   line-height: 1;
 }
@@ -1059,7 +1251,7 @@
   border-radius: 4px;
   background: var(--accent);
   color: var(--accent-ink);
-  font-size: 5.5px;
+  font-size: calc(5.5px * var(--text-scale));
   font-weight: 800;
 }
 
@@ -1131,14 +1323,14 @@
 
 .theme-card-name {
   color: var(--text);
-  font-size: 10.8px;
+  font-size: calc(10.8px * var(--text-scale));
   font-weight: 650;
   line-height: 1.2;
 }
 
 .theme-card-meta {
   color: var(--dim);
-  font-size: 8.4px;
+  font-size: calc(8.4px * var(--text-scale));
   font-weight: 650;
   letter-spacing: 0.09em;
   text-transform: uppercase;

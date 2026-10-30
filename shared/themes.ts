@@ -5,9 +5,11 @@
  */
 
 export type ThemeMode = 'dark' | 'light'
-export type ThemeFamily = 'modern' | 'retro' | 'bubbly' | 'rocker' | 'ghost'
+export type ThemeFamily = 'modern' | 'retro' | 'bubbly' | 'rocker' | 'ghost' | 'graf'
 
 export type ThemeId =
+  | 'graf-dark'
+  | 'graf-light'
   | 'modern-dark'
   | 'modern-light'
   | 'retro-dark'
@@ -32,6 +34,24 @@ export interface ThemeDefinition {
 }
 
 export const THEMES: ThemeDefinition[] = [
+  {
+    id: 'graf-dark',
+    name: 'Graffiti Dark',
+    family: 'graf',
+    mode: 'dark',
+    blurb: 'The wordmark turned into a theme: spray cyan, magenta, and orange on inked concrete.',
+    swatches: ['#0a0b10', '#171b26', '#ff3f9a'],
+    previewText: '#f6f7fb'
+  },
+  {
+    id: 'graf-light',
+    name: 'Graffiti Light',
+    family: 'graf',
+    mode: 'light',
+    blurb: 'Paint on paper: magenta and teal over warm white, with poster-weight headings.',
+    swatches: ['#f4f2ec', '#ffffff', '#c4147e'],
+    previewText: '#14131a'
+  },
   {
     id: 'modern-dark',
     name: 'Modern Dark',
@@ -124,7 +144,8 @@ export const THEMES: ThemeDefinition[] = [
   }
 ]
 
-export const DEFAULT_THEME: ThemeId = 'modern-dark'
+/** New installs start on the wordmark's own palette; saved themes are never rewritten. */
+export const DEFAULT_THEME: ThemeId = 'graf-dark'
 
 const THEME_IDS = new Set<string>(THEMES.map((theme) => theme.id))
 
