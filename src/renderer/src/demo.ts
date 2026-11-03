@@ -265,7 +265,7 @@ export function createDemoApi(): LauncherApi {
   const timers = new Map<string, { interval: number | null; timeouts: number[] }>()
   let launcherUpdate: LauncherUpdateInfo = {
     state: 'available',
-    currentVersion: '0.4.5',
+    currentVersion: '0.4.6',
     latestVersion: '0.5.0',
     releaseName: 'Launcher 0.5.0',
     releaseUrl: 'https://github.com/MustacheHax/MCM98_Launcher/releases',
@@ -432,7 +432,7 @@ export function createDemoApi(): LauncherApi {
       await wait(700)
       const health: HealthResponse = {
         ok: true,
-        version: '0.4.5',
+        version: '0.4.6',
         timestamp: new Date().toISOString(),
         catalogProducts: buildCatalogProducts().length,
         githubAuthenticated: true
@@ -442,7 +442,7 @@ export function createDemoApi(): LauncherApi {
 
     async getAppInfo() {
       const info: AppInfo = {
-        version: '0.4.5',
+        version: '0.4.6',
         platform: 'win32',
         arch: 'x64',
         isPackaged: false,
@@ -456,7 +456,7 @@ export function createDemoApi(): LauncherApi {
     async fetchCatalog() {
       await wait(720)
       const response: CatalogResponse = {
-        backendVersion: '0.4.5',
+        backendVersion: '0.4.6',
         generatedAt: new Date().toISOString(),
         platform: 'win32',
         products: buildCatalogProducts()

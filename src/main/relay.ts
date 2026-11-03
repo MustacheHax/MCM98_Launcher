@@ -37,10 +37,21 @@ interface FetchOptions {
   timeoutMs?: number
   attempts?: number
   retryDelayMs?: number
+  /**
+   * Skip every cache. Electron's `net.fetch` honours the relay's `Cache-Control`,
+   * so a cached answer can hide a release for minutes — and the launcher only
+   * checks every few hours. Update checks therefore always go to the network.
+   */
+  bypassCache?: boolean
 }
 
 function joinUrl(base: string, path: string): string {
   return `${base.replace(/\/+$/, '')}${path}`
+}
+
+function uncached(url: string): string {
+  const separator = url.includes('?') ? '&' : '?'
+  return `${url}${separator}_t=${Date.now()}`
 }
 
 async function requestJson<T>(
@@ -53,16 +64,19 @@ async function requestJson<T>(
   const retryDelayMs = options.retryDelayMs ?? 2_000
   let lastError: Error | null = null
 
+  const target = options.bypassCache ? uncached(url) : url
+
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
 
     try {
-      const response = await net.fetch(url, {
+      const response = await net.fetch(target, {
         signal: controller.signal,
         headers: {
           Accept: 'application/json',
-          'User-Agent': `MCM98-Launcher/${app.getVersion()}`
+          'User-Agent': `MCM98-Launcher/${app.getVersion()}`,
+          ...(options.bypassCache ? { 'Cache-Control': 'no-cache', Pragma: 'no-cache' } : {})
         }
       })
 
@@ -196,7 +210,8 @@ export async function fetchCatalog(
   const payload = await requestJson<unknown>(url, log, {
     attempts: 2,
     timeoutMs: 60_000,
-    retryDelayMs: 2_000
+    retryDelayMs: 2_000,
+    bypassCache: true
   })
   assertCatalog(payload)
   return payload
@@ -211,7 +226,8 @@ export async function fetchLauncherRelease(
   const payload = await requestJson<unknown>(url, log, {
     attempts: 2,
     timeoutMs: 20_000,
-    retryDelayMs: 1_500
+    retryDelayMs: 1_500,
+    bypassCache: true
   })
   assertLauncherRelease(payload)
   return payload

@@ -6,7 +6,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
-Nothing merged yet. Planned work and the version each item ships under live in [ROADMAP.md](ROADMAP.md).
+Planned work and the version each item ships under live in [ROADMAP.md](ROADMAP.md).
+
+## [0.4.6] — 2026-11-03
+
+### Added
+
+- **A real test suite** — `npm test` runs twelve checks over the parts that broke before or would break silently: the downloader against a local range-capable server (resume from a partial, a server that ignores `Range`, a `416` retry, and a bad digest discarding its partial), the play-state store (a live session surviving a restart, a dead PID being reaped with its playtime folded in, normal exits adding playtime, and the persisted JSON round-tripping), and save detection (publisher nesting, direct folders beating nested ones, install folders beating fuzzy matches, and a clean miss).
+- The downloader and save detection no longer import Electron directly, so they run in plain Node: `downloadFile` takes its transport as `fetchImpl` (the app passes `net.fetch`) and `detectSaveDirectory` takes the platform folders from the new `saveRoots.ts`.
+- Test files are typechecked with the rest of the main process (`test/**/*.mts` in `tsconfig.node.json`).
+
+### Fixed
+
+- **A freshly published launcher release could stay undetected for hours.** Two caches stacked on the update check: the relay reused its GitHub snapshot for `CACHE_TTL_SECONDS` (300s) on the launcher's own repository, and it answered `/api/launcher` with `Cache-Control: public, max-age=60, stale-while-revalidate=300`, which Electron's `net.fetch` honours — a second check inside that window was served from disk without the server being contacted at all, and because the launcher only polls every six hours, one stale answer hid the release until the next poll.
+  - The launcher's snapshot now has its own 30-second ceiling (`LAUNCHER_SNAPSHOT_TTL_MS`), long enough to absorb a burst of clients, short enough that a new release is never hidden.
+  - `/api/launcher` answers with `Cache-Control: no-store, max-age=0` and `Pragma: no-cache`, and `/api/catalog` with `no-cache` so it revalidates through its ETag instead of serving a stale copy.
+  - The client appends `_t=<timestamp>` and sends `Cache-Control: no-cache` for catalog and launcher checks, so it never trusts a stored answer even when the relay it talks to still runs the older headers.
+
+  Verified by reproducing the stale read against a local server that returns the same cache headers: the second `net.fetch` was answered from cache with no request reaching the server, and the same URL with a cache-busting parameter returned the updated body.
+
+  Fixing existing installs needs only a relay redeploy, because the new headers stop every client — including 0.3.4 — from caching the answer. A client built after this change also bypasses any relay that still sends the old headers.
 
 ## [0.4.5] — 2026-11-03
 
@@ -78,7 +97,8 @@ The largest release so far: the launcher gained persistence, resume, and library
 
 Releases before 0.3.0 predate this changelog. In short: 0.2.0 brought self-installation and the relay-backed catalog, and 0.1.0 was the first release with catalog listing, install, launch, and uninstall.
 
-[Unreleased]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.5...HEAD
+[Unreleased]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.6...HEAD
+[0.4.6]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.0...v0.4.5
 [0.4.0]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.3.4...v0.4.0
 [0.3.4]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.3.0...v0.3.4

@@ -12,6 +12,12 @@ import {
 } from './github'
 
 const DEFAULT_LAUNCHER_REPO = 'MustacheHax/MCM98_Launcher'
+/**
+ * The launcher's own release must be noticed within seconds of publishing, so
+ * its snapshot is cached briefly — long enough to absorb a burst of clients
+ * waking at once, short enough that a new release is never hidden.
+ */
+const LAUNCHER_SNAPSHOT_TTL_MS = 30_000
 const REPO_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
 
 const PLATFORM_LABEL: Record<Platform, string> = {
@@ -107,7 +113,7 @@ export async function resolveLauncherAsset(
   platform: Platform
 ): Promise<LauncherAssetResolution> {
   const repo = launcherRepo()
-  const snapshot = await getRepoSnapshot(repo, false)
+  const snapshot = await getRepoSnapshot(repo, false, LAUNCHER_SNAPSHOT_TTL_MS)
 
   if (!snapshot.release) {
     return {

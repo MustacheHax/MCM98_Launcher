@@ -43,6 +43,7 @@ import { LibraryService } from './library'
 import { Logger } from './logger'
 import { PlayStateStore } from './playState'
 import { checkBackend } from './relay'
+import { defaultSaveRoots } from './saveRoots'
 import { backupSaves, detectSaveDirectory } from './saves'
 import { LauncherUpdater } from './updater'
 
@@ -420,13 +421,13 @@ function registerIpc(): void {
   ipcMain.handle(IPC.getSaveInfo, async (_event, productId: string): Promise<SaveInfo> => {
     const product = await library.read(String(productId ?? ''))
     if (!product) throw new Error('That product is not installed.')
-    return detectSaveDirectory(product)
+    return detectSaveDirectory(product, defaultSaveRoots())
   })
 
   ipcMain.handle(IPC.openSaveFolder, async (_event, productId: string): Promise<void> => {
     const product = await library.read(String(productId ?? ''))
     if (!product) throw new Error('That product is not installed.')
-    const info = await detectSaveDirectory(product)
+    const info = await detectSaveDirectory(product, defaultSaveRoots())
     if (!info.path) {
       throw new Error(
         'No save folder was detected for this product. Open the install folder to look for one.'
@@ -439,7 +440,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.backupSaves, async (_event, productId: string): Promise<BackupResult> => {
     const product = await library.read(String(productId ?? ''))
     if (!product) throw new Error('That product is not installed.')
-    return backupSaves(product, config.dataRoot, logger)
+    return backupSaves(product, config.dataRoot, logger, defaultSaveRoots())
   })
 
   ipcMain.handle(

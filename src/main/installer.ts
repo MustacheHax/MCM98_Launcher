@@ -1,3 +1,4 @@
+import { net } from 'electron'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { chmod, readdir, rename, stat } from 'node:fs/promises'
@@ -263,6 +264,7 @@ export class InstallManager {
         expectedBytes: request.sizeBytes,
         digest: request.digest,
         signal,
+        fetchImpl: net.fetch,
         onProgress: (received, total) => this.updateProgress(record, received, total),
         onResume: (existingBytes) => {
           task.message = `Resuming ${request.assetName} from ${describeBytes(existingBytes)}`

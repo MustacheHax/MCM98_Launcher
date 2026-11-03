@@ -1,4 +1,4 @@
-import { app, shell } from 'electron'
+import { app, net, shell } from 'electron'
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { chmod, mkdir, writeFile } from 'node:fs/promises'
@@ -299,7 +299,7 @@ export class LauncherUpdater {
           ...releaseFields(release),
           checkedAt: new Date().toISOString(),
           error:
-            'The newest launcher release does not include a version number. Publish a release titled or packaged with a version such as 0.4.5.'
+            'The newest launcher release does not include a version number. Publish a release titled or packaged with a version such as 0.4.6.'
         })
       }
 
@@ -358,6 +358,7 @@ export class LauncherUpdater {
         expectedBytes: input.totalBytes,
         digest: input.digest,
         signal: input.signal,
+        fetchImpl: net.fetch,
         onResume: (existingBytes) => {
           this.log.info(`Resuming the launcher update at ${existingBytes} bytes.`)
         },

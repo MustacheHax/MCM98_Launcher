@@ -349,7 +349,12 @@ async function fetchRelease(repo: string, includePrereleases: boolean): Promise<
  */
 export async function getRepoSnapshot(
   repo: string,
-  includePrereleases: boolean
+  includePrereleases: boolean,
+  /**
+   * How long a successful snapshot may be reused. Callers that must notice a
+   * brand-new release (the launcher's own self-update) pass a short value.
+   */
+  maxAgeMs: number = SUCCESS_TTL_MS
 ): Promise<RepoSnapshot> {
   const key = `${repo.toLowerCase()}|${includePrereleases ? 'pre' : 'stable'}`
   const cached = snapshotCache.get(key)
@@ -386,7 +391,7 @@ export async function getRepoSnapshot(
   }
 
   const hasFailure = Boolean(repoError || releaseError)
-  const ttl = hasFailure ? ERROR_TTL_MS : SUCCESS_TTL_MS
+  const ttl = hasFailure ? Math.min(ERROR_TTL_MS, maxAgeMs) : maxAgeMs
 
   snapshotCache.set(key, { ...snapshot, expiresAt: now + ttl })
 

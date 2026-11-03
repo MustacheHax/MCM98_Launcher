@@ -1,7 +1,5 @@
-import { app } from 'electron'
 import { existsSync } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'
-import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import * as tar from 'tar'
 import type { BackupResult, InstalledProduct, SaveInfo } from '@shared/types'
@@ -100,49 +98,23 @@ async function installCandidates(product: InstalledProduct): Promise<Candidate[]
   return found
 }
 
-function candidateRoots(): Array<{ root: string; source: NonNullable<SaveInfo['source']> }> {
-  const roots: Array<{ root: string; source: NonNullable<SaveInfo['source']> }> = []
-
-  const push = (value: string | undefined, source: NonNullable<SaveInfo['source']>): void => {
-    if (!value) return
-    if (roots.some((item) => item.root === value)) return
-    roots.push({ root: value, source })
-  }
-
-  try {
-    push(app.getPath('documents'), 'documents')
-  } catch {
-    // The documents folder can be unavailable on trimmed-down systems.
-  }
-
-  if (process.platform === 'win32') {
-    push(process.env.APPDATA, 'appData')
-    push(process.env.LOCALAPPDATA, 'appData')
-    // Unity titles write under LocalLow, which sits outside the roaming folder.
-    push(join(homedir(), 'AppData', 'LocalLow'), 'appData')
-    try {
-      push(app.getPath('appData'), 'appData')
-    } catch {
-      // Ignore a missing roaming folder.
-    }
-  } else if (process.platform === 'darwin') {
-    push(join(homedir(), 'Library', 'Application Support'), 'appData')
-  } else {
-    push(process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share'), 'appData')
-    push(join(homedir(), '.config'), 'appData')
-  }
-
-  return roots
+/**
+ * A place games keep player data, plus where that place came from. Callers
+ * build these from the platform's folders; tests pass their own.
+ */
+export interface SaveRoot {
+  path: string
+  source: NonNullable<SaveInfo['source']>
 }
 
 /** Scans the platform's user-data folders for a directory named after the product. */
-async function rootCandidates(product: InstalledProduct): Promise<Candidate[]> {
+async function rootCandidates(product: InstalledProduct, roots: SaveRoot[]): Promise<Candidate[]> {
   const variants = nameVariants(product)
   if (variants.length === 0) return []
 
   const found: Candidate[] = []
-  for (const { root, source } of candidateRoots()) {
-    if (!existsSync(root)) continue
+  for (const { path: root, source } of roots) {
+    if (!root || !existsSync(root)) continue
 
     let entries
     try {
@@ -216,8 +188,14 @@ async function publisherCandidates(
  * inside the install, a nested studio folder, then a fuzzy name match. Ties
  * break toward the most recent write.
  */
-export async function detectSaveDirectory(product: InstalledProduct): Promise<SaveInfo> {
-  const candidates = [...(await installCandidates(product)), ...(await rootCandidates(product))]
+export async function detectSaveDirectory(
+  product: InstalledProduct,
+  roots: SaveRoot[]
+): Promise<SaveInfo> {
+  const candidates = [
+    ...(await installCandidates(product)),
+    ...(await rootCandidates(product, roots))
+  ]
   if (candidates.length === 0) {
     return { path: null, source: null, exists: false }
   }
@@ -250,9 +228,10 @@ function timestamp(): string {
 export async function backupSaves(
   product: InstalledProduct,
   dataRoot: string,
-  log: Logger
+  log: Logger,
+  roots: SaveRoot[]
 ): Promise<BackupResult> {
-  const info = await detectSaveDirectory(product)
+  const info = await detectSaveDirectory(product, roots)
   if (!info.path) {
     throw new Error(
       'No save folder was detected for this product. Use Open folder to inspect the install first.'

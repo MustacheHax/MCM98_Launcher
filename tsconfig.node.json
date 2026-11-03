@@ -22,6 +22,7 @@
     "src/main/**/*.d.ts",
     "src/preload/**/*.ts",
     "shared/**/*.ts",
-    "shared/**/*.d.ts"
+    "shared/**/*.d.ts",
+    "test/**/*.mts"
   ]
 }

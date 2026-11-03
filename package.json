@@ -1,6 +1,6 @@
 {
   "name": "mcm98-launcher",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "private": true,
   "description": "MCM98 desktop launcher and updater for games and apps",
   "author": "MCM98",
@@ -14,6 +14,7 @@
     "dev:ui": "vite --config vite.web.config.mts",
     "build": "npm run typecheck && electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "node --import tsx --test test/download.test.mts test/playState.test.mts test/saves.test.mts",
     "start": "electron-vite preview",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win",
@@ -36,6 +37,7 @@
     "electron-vite": "^6.0.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.5"
   }

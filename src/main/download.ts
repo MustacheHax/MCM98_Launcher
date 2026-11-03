@@ -4,7 +4,13 @@ import { copyFile, mkdir, rename, rm, stat } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import { net } from 'electron'
+
+/**
+ * The one Electron dependency this file would otherwise have. Callers pass
+ * `net.fetch` so the transport keeps Electron's proxy and certificate handling,
+ * and tests can pass any `fetch`-compatible function.
+ */
+export type DownloadFetch = (url: string, init: RequestInit) => Promise<Response>
 
 export interface DownloadOptions {
   url: string
@@ -18,6 +24,8 @@ export interface DownloadOptions {
   onDownloaded: () => void
   /** Fired when an earlier partial file is being continued. */
   onResume?: (existingBytes: number, totalBytes: number) => void
+  /** Transport used for the request; the app passes Electron's `net.fetch`. */
+  fetchImpl: DownloadFetch
 }
 
 export interface DownloadResult {
@@ -185,7 +193,7 @@ export async function downloadFile(options: DownloadOptions): Promise<DownloadRe
 
 async function request(options: DownloadOptions, existing: number): Promise<Response> {
   try {
-    return await net.fetch(options.url, {
+    return await options.fetchImpl(options.url, {
       signal: options.signal,
       redirect: 'follow',
       headers: existing > 0 ? { Range: `bytes=${existing}-` } : undefined

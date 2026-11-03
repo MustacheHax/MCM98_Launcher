@@ -4,10 +4,14 @@
  * when the card should reappear for people who dismissed the previous one.
  */
 export const WHATS_NEW = {
-  version: '0.4.5',
+  version: '0.4.6',
   eyebrow: "What's new",
   title: 'Everything since 0.3',
   items: [
+    {
+      title: 'Update checks you can trust',
+      text: 'A new release now shows up on the next check. The relay and the launcher had both been caching the self-update answer, which could hide a release for hours.'
+    },
     {
       title: 'Twenty-two themes, eleven families',
       text: 'Vapor, Terminal, Arcade, Night and Mono join the original families. Each one changes type, corners and texture, not just colour; Mono doubles as a high-contrast option.'

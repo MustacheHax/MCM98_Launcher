@@ -183,7 +183,9 @@ app.get(
       products: resolved
     }
 
-    res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
+    // Revalidate before every use: a cached copy would hide a product's newest
+    // release for minutes, and the ETag makes the revalidation cheap.
+    res.setHeader('Cache-Control', 'no-cache')
     res.json(payload)
   })
 )
@@ -195,7 +197,11 @@ app.get(
     if (!platform) return
 
     const payload = await resolveLauncherRelease(platform, publicBaseUrl(req))
-    res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
+    // A cached self-update answer hides a new release, and the launcher only
+    // polls every few hours, so this response must never be stored by a proxy
+    // or by the client's own HTTP cache.
+    res.setHeader('Cache-Control', 'no-store, max-age=0')
+    res.setHeader('Pragma', 'no-cache')
     res.json(payload)
   })
 )

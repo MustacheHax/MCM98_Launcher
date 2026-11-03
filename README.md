@@ -43,10 +43,12 @@ The launcher **installs prebuilt release artifacts**. It does not run a compiler
 │  │  ├─ detect.ts      executable detection
 │  │  ├─ launch.ts      detached process launching and tracking
 │  │  ├─ playState.ts   persisted sessions and play history
-│  │  ├─ saves.ts       save-folder detection and backups
+│  │  ├─ saves.ts       save-folder detection and backups (Electron-free)
+│  │  ├─ saveRoots.ts   platform save locations, the only Electron part of that
 │  │  └─ library.ts     installed-product manifests
 │  ├─ preload/          typed contextBridge API
 │  └─ renderer/         React UI (+ browser demo bridge)
+├─ test/                npm test: downloader, play state, save detection
 ├─ server/              Render relay service
 │  ├─ src/              Express app, GitHub resolver, cache
 │  ├─ catalog.json      selected repositories (edit this)
@@ -198,9 +200,9 @@ The launcher checks its own repository for stable GitHub Releases. By default th
 
 The app compares the release version with its own and only prompts when the release is newer. Semantic versions are read from the tag first, then from the asset name and release title, so a rolling tag such as `newest` still resolves to a comparable version. **Update now** downloads the build through the relay, verifies GitHub's digest when present, and hands off to a small detached helper. The helper waits for the launcher to exit, runs the NSIS installer (or copies a portable zip / AppImage / archive into place), and relaunches the launcher. On macOS, the downloaded DMG or zip is opened in Finder and the user finishes the drag-install. The published release must not be a prerelease or draft.
 
-The current app version is `0.4.5`. If the newest release has no comparable version at all, Settings explains that instead of offering a bogus update.
+The current app version is `0.4.6`. If the newest release has no comparable version at all, Settings explains that instead of offering a bogus update.
 
-Self-installation arrived in 0.2.0. Install 0.2.0 or newer manually once (run `release/MCM98 Launcher-0.4.5-win-x64.exe` after attaching it to the release); every later version can then update from inside the running launcher. A 0.1.0 build can only detect the release and open GitHub.
+Self-installation arrived in 0.2.0. Install 0.2.0 or newer manually once (run `release/MCM98 Launcher-0.4.6-win-x64.exe` after attaching it to the release); every later version can then update from inside the running launcher. A 0.1.0 build can only detect the release and open GitHub.
 
 ### Versioning and roadmap
 
@@ -281,7 +283,8 @@ Render's free tier sleeps. The desktop client retries the catalog request and ex
 ## Building the desktop app
 
 ```bash
-npm run typecheck     # main/preload + renderer
+npm run typecheck     # main/preload + renderer + tests
+npm test              # downloader, play-state, and save-detection checks
 npm run build         # typecheck, then electron-vite production bundle
 npm run dist:win      # NSIS installer + portable zip
 npm run dist:mac      # DMG + zip
@@ -358,7 +361,8 @@ The next releases are scoped and versioned in [ROADMAP.md](ROADMAP.md): `0.4.1` 
 | --- | --- |
 | `npm run dev` | Electron app with Vite hot reload. |
 | `npm run dev:ui` | Renderer-only browser preview with demo data on port 5174. |
-| `npm run typecheck` | Type-check main/preload and renderer. |
+| `npm run typecheck` | Type-check main/preload and renderer, including the tests. |
+| `npm test` | Run the downloader, play-state, and save-detection checks (`node --test` via tsx). |
 | `npm run build` | Type-check and build the Electron app. |
 | `npm run start` | Launch the production bundle through electron-vite preview. |
 | `npm run dist:*` | Build platform installers into `release/`. |
