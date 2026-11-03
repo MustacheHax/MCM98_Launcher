@@ -78,6 +78,46 @@ function asyncRoute(
   }
 }
 
+function requestedRange(req: Request): string | null {
+  const value = req.headers.range
+  return typeof value === 'string' && /^bytes=\d+-\d*$/.test(value) ? value : null
+}
+
+/**
+ * Streams a release asset to the client and mirrors GitHub's range response, so
+ * an interrupted download resumes instead of starting over.
+ */
+async function streamAsset(
+  res: Response,
+  upstreamPromise: Promise<globalThis.Response>,
+  asset: { name: string; size: number; content_type: string }
+): Promise<void> {
+  const upstream = await upstreamPromise
+  const partial = upstream.status === 206
+  const upstreamLength = Number(upstream.headers.get('content-length'))
+
+  res.status(partial ? 206 : 200)
+  res.setHeader('Accept-Ranges', 'bytes')
+  res.setHeader('Content-Type', asset.content_type || 'application/octet-stream')
+  res.setHeader(
+    'Content-Length',
+    String(partial && upstreamLength > 0 ? upstreamLength : asset.size)
+  )
+  const contentRange = upstream.headers.get('content-range')
+  if (partial && contentRange) res.setHeader('Content-Range', contentRange)
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="${asset.name.replace(/["\r\n]/g, '_')}"`
+  )
+  res.setHeader('Cache-Control', 'no-store')
+
+  if (!upstream.body) throw new Error('GitHub returned an empty asset stream.')
+  await pipeline(
+    Readable.fromWeb(upstream.body as import('node:stream/web').ReadableStream),
+    res
+  )
+}
+
 app.get('/', (_req, res) => {
   res.json({
     service: 'MCM98 Launcher Relay',
@@ -184,21 +224,10 @@ app.get(
     })
 
     try {
-      const upstream = await openAssetStream(resolved.repo, asset.id, controller.signal)
-
-      res.status(200)
-      res.setHeader('Content-Type', asset.content_type || 'application/octet-stream')
-      res.setHeader('Content-Length', String(asset.size))
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="${asset.name.replace(/["\r\n]/g, '_')}"`
-      )
-      res.setHeader('Cache-Control', 'no-store')
-
-      if (!upstream.body) throw new Error('GitHub returned an empty asset stream.')
-      await pipeline(
-        Readable.fromWeb(upstream.body as import('node:stream/web').ReadableStream),
-        res
+      await streamAsset(
+        res,
+        openAssetStream(resolved.repo, asset.id, controller.signal, requestedRange(req)),
+        asset
       )
     } catch (error) {
       if (controller.signal.aborted) return
@@ -247,21 +276,10 @@ app.get(
     })
 
     try {
-      const upstream = await openAssetStream(product.repo, asset.id, controller.signal)
-
-      res.status(200)
-      res.setHeader('Content-Type', asset.content_type || 'application/octet-stream')
-      res.setHeader('Content-Length', String(asset.size))
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="${asset.name.replace(/["\r\n]/g, '_')}"`
-      )
-      res.setHeader('Cache-Control', 'no-store')
-
-      if (!upstream.body) throw new Error('GitHub returned an empty asset stream.')
-      await pipeline(
-        Readable.fromWeb(upstream.body as import('node:stream/web').ReadableStream),
-        res
+      await streamAsset(
+        res,
+        openAssetStream(product.repo, asset.id, controller.signal, requestedRange(req)),
+        asset
       )
     } catch (error) {
       if (controller.signal.aborted) return

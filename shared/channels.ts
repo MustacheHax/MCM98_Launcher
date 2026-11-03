@@ -19,6 +19,11 @@ export const IPC = {
 
   launch: 'launch:start',
   getRunning: 'launch:running',
+  getPlayState: 'launch:play-state',
+
+  getSaveInfo: 'saves:info',
+  openSaveFolder: 'saves:open',
+  backupSaves: 'saves:backup',
 
   openPath: 'shell:open-path',
   openExternal: 'shell:open-external',
@@ -26,5 +31,6 @@ export const IPC = {
   tasksChanged: 'event:tasks',
   libraryChanged: 'event:library',
   runningChanged: 'event:running',
-  launcherUpdateChanged: 'event:launcher-update'
+  launcherUpdateChanged: 'event:launcher-update',
+  playStateChanged: 'event:play-state'
 } as const

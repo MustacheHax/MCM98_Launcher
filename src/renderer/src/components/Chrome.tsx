@@ -10,7 +10,7 @@ const NAV_ITEMS: Array<{ view: View; label: string; icon: IconName }> = [
 ]
 
 export function TitleBar(): JSX.Element {
-  const { appInfo, demoMode } = useApp()
+  const { appInfo, demoMode, openPalette } = useApp()
   return (
     <header className="titlebar">
       <div className="titlebar-brand">
@@ -20,6 +20,16 @@ export function TitleBar(): JSX.Element {
       </div>
       <div className="titlebar-right">
         {demoMode && <span className="demo-pill">Demo data</span>}
+        <button
+          type="button"
+          className="titlebar-palette"
+          onClick={openPalette}
+          title="Search views, products, and actions (Ctrl+K)"
+          aria-label="Open the command palette"
+        >
+          <Icon name="search" size={12} />
+          <kbd>ctrl k</kbd>
+        </button>
         <span className="titlebar-version">v{appInfo?.version ?? '0.3.0'}</span>
       </div>
     </header>

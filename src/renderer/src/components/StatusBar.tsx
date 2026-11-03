@@ -28,15 +28,17 @@ export function StatusBar(): JSX.Element {
     tasks
   } = useApp()
 
-  const relayState = catalogError
+  const stale = Boolean(catalog?.stale)
+  const relayState = stale || catalogError
     ? 'offline'
     : catalogLoading
       ? 'connecting'
       : catalog
         ? 'online'
         : 'idle'
-  const relayLabel =
-    relayState === 'offline'
+  const relayLabel = stale
+    ? 'Relay offline · cached'
+    : relayState === 'offline'
       ? 'Relay offline'
       : relayState === 'connecting'
         ? 'Relay connecting'
@@ -89,8 +91,8 @@ export function StatusBar(): JSX.Element {
               )}
               {catalog && (
                 <div>
-                  <dt>Updated</dt>
-                  <dd>{formatDate(catalog.generatedAt)}</dd>
+                  <dt>{stale ? 'Cached' : 'Updated'}</dt>
+                  <dd>{formatDate(catalog.cachedAt ?? catalog.generatedAt)}</dd>
                 </div>
               )}
             </dl>

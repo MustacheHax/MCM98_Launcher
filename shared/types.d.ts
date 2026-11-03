@@ -57,6 +57,10 @@ export interface CatalogResponse {
   generatedAt: string
   platform: Platform
   products: ProductEntry[]
+  /** True when the relay could not be reached and a saved catalog is shown. */
+  stale?: boolean
+  /** When the shown catalog was last resolved successfully. */
+  cachedAt?: string | null
 }
 
 export interface HealthResponse {
@@ -140,6 +144,37 @@ export interface LauncherUpdateInfo {
 export type LauncherLayout = 'compact' | 'full'
 export type LaunchView = 'library' | 'catalog' | 'downloads'
 
+export interface WindowBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/** Local play history for one installed product. */
+export interface PlayRecord {
+  productId: string
+  lastPlayedAt: string | null
+  playtimeMs: number
+  launches: number
+}
+
+/** Play history keyed by product id. */
+export type PlayState = Record<string, PlayRecord>
+
+export interface SaveInfo {
+  /** Detected save folder, or null when nothing looks like a save folder. */
+  path: string | null
+  /** Where the folder was found, for the UI hint. */
+  source: 'install' | 'appData' | 'documents' | null
+  exists: boolean
+}
+
+export interface BackupResult {
+  path: string
+  bytes: number
+}
+
 export interface LauncherConfig {
   /** Base URL of the Render relay, without a trailing slash. */
   backendUrl: string
@@ -165,6 +200,10 @@ export interface LauncherConfig {
   autoCheckProducts: boolean
   /** Ask before uninstalling a product. */
   confirmUninstall: boolean
+  /** Release versions the user chose to skip, keyed by product id. */
+  skippedUpdates: Record<string, string>
+  /** Last window bounds per layout, so the window reopens where it was left. */
+  windowBounds: Partial<Record<LauncherLayout, WindowBounds>>
 }
 
 export interface AppInfo {
@@ -255,6 +294,11 @@ export interface LauncherApi {
 
   launch(productId: string): Promise<{ pid: number }>
   getRunning(): Promise<string[]>
+  getPlayState(): Promise<PlayState>
+
+  getSaveInfo(productId: string): Promise<SaveInfo>
+  openSaveFolder(productId: string): Promise<void>
+  backupSaves(productId: string): Promise<BackupResult>
 
   openPath(target: 'installRoot' | 'product' | 'data', productId?: string): Promise<void>
   openExternal(url: string): Promise<void>
@@ -263,6 +307,7 @@ export interface LauncherApi {
   onLibraryChanged(callback: () => void): () => void
   onRunningChanged(callback: (productIds: string[]) => void): () => void
   onLauncherUpdate(callback: (info: LauncherUpdateInfo) => void): () => void
+  onPlayStateChanged(callback: (state: PlayState) => void): () => void
 }
 
 declare global {

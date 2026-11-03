@@ -5,16 +5,25 @@ import type {
   AppInfo,
   CatalogResponse,
   InstallPhase,
+  InstallRequest,
   InstallTask,
   InstalledProduct,
   LauncherApi,
   LauncherConfig,
   LauncherUpdateInfo,
+  PlayState,
   ProductEntry
 } from '@shared/types'
 import { errorMessage, demoMode, getLauncher } from './api'
 import { AppContext, type ToastKind, type View } from './state'
-import { isTerminalPhase } from './utils'
+import {
+  activeTaskFor,
+  isTerminalPhase,
+  isUpdateAvailable,
+  versionFromRelease,
+  versionLabel
+} from './utils'
+import { CommandPalette } from './components/CommandPalette'
 import { Sidebar, TitleBar } from './components/Chrome'
 import { StatusBar } from './components/StatusBar'
 import { CatalogView } from './components/CatalogView'
@@ -30,6 +39,26 @@ interface ToastState {
   id: number
   kind: ToastKind
   message: string
+}
+
+const VIEW_ORDER: View[] = ['library', 'catalog', 'downloads', 'settings']
+
+function toInstallRequest(product: ProductEntry): InstallRequest {
+  const release = product.release
+  if (!release) throw new Error('This product has no installable release.')
+  return {
+    productId: product.id,
+    name: product.name,
+    version: versionFromRelease(release),
+    repo: product.repo,
+    releaseUrl: release.url,
+    assetName: release.asset.name,
+    downloadUrl: release.asset.downloadUrl,
+    sizeBytes: release.asset.size,
+    digest: release.asset.digest,
+    executable: product.install?.executable ?? null,
+    args: product.install?.args ?? []
+  }
 }
 
 function App(): JSX.Element {
@@ -52,10 +81,13 @@ function App(): JSX.Element {
   const [library, setLibrary] = useState<InstalledProduct[]>([])
   const [tasks, setTasks] = useState<InstallTask[]>([])
   const [running, setRunning] = useState<string[]>([])
+  const [playState, setPlayState] = useState<PlayState>({})
   const [view, setView] = useState<View>('library')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<ProductEntry | null>(null)
   const [busyProductId, setBusyProductId] = useState<string | null>(null)
+  const [repairingId, setRepairingId] = useState<string | null>(null)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const [confirmProduct, setConfirmProduct] = useState<InstalledProduct | null>(null)
   const [uninstalling, setUninstalling] = useState(false)
   const [toastState, setToastState] = useState<ToastState | null>(null)
@@ -201,18 +233,27 @@ function App(): JSX.Element {
     })
     const unsubscribeRunning = bridge.onRunningChanged((ids) => setRunning(ids))
     const unsubscribeUpdate = bridge.onLauncherUpdate((next) => setLauncherUpdate(next))
+    const unsubscribePlayState = bridge.onPlayStateChanged((next) => setPlayState(next))
 
     void (async () => {
       try {
-        const [cfg, info, currentTasks, currentRunning, currentLibrary, currentUpdate] =
-          await Promise.all([
-            bridge.getConfig(),
-            bridge.getAppInfo(),
-            bridge.getTasks(),
-            bridge.getRunning(),
-            bridge.listLibrary(),
-            bridge.getLauncherUpdate()
-          ])
+        const [
+          cfg,
+          info,
+          currentTasks,
+          currentRunning,
+          currentLibrary,
+          currentUpdate,
+          currentPlayState
+        ] = await Promise.all([
+          bridge.getConfig(),
+          bridge.getAppInfo(),
+          bridge.getTasks(),
+          bridge.getRunning(),
+          bridge.listLibrary(),
+          bridge.getLauncherUpdate(),
+          bridge.getPlayState()
+        ])
         if (!alive) return
         setConfig(cfg)
         setAppInfo(info)
@@ -220,6 +261,7 @@ function App(): JSX.Element {
         setRunning(currentRunning)
         setLibrary(currentLibrary)
         setLauncherUpdate(currentUpdate)
+        setPlayState(currentPlayState)
       } catch (error) {
         if (alive) setBootError(errorMessage(error))
       }
@@ -231,6 +273,7 @@ function App(): JSX.Element {
       unsubscribeLibrary()
       unsubscribeRunning()
       unsubscribeUpdate()
+      unsubscribePlayState()
     }
   }, [bridge, refreshLibrary])
 
@@ -276,34 +319,37 @@ function App(): JSX.Element {
     if (completed) void refreshLibrary()
   }, [tasks, toast, refreshLibrary])
 
-  const install = useCallback(
-    async (product: ProductEntry): Promise<void> => {
+  const startInstall = useCallback(
+    async (product: ProductEntry, mode: 'install' | 'repair'): Promise<void> => {
       if (!bridge || !product.release || product.status !== 'ready') return
-      setBusyProductId(product.id)
+      if (mode === 'repair') setRepairingId(product.id)
+      else setBusyProductId(product.id)
       try {
-        await bridge.startInstall({
-          productId: product.id,
-          name: product.name,
-          version: product.release.tag,
-          repo: product.repo,
-          releaseUrl: product.release.url,
-          assetName: product.release.asset.name,
-          downloadUrl: product.release.asset.downloadUrl,
-          sizeBytes: product.release.asset.size,
-          digest: product.release.asset.digest,
-          executable: product.install?.executable ?? null,
-          args: product.install?.args ?? []
-        })
+        await bridge.startInstall(toInstallRequest(product))
         setSelected(null)
         setView('downloads')
-        toast(`Downloading ${product.name}`, 'info')
+        toast(
+          mode === 'repair' ? `Repairing ${product.name}` : `Downloading ${product.name}`,
+          'info'
+        )
       } catch (error) {
         toast(errorMessage(error), 'error')
       } finally {
-        setBusyProductId(null)
+        if (mode === 'repair') setRepairingId(null)
+        else setBusyProductId(null)
       }
     },
     [bridge, toast]
+  )
+
+  const install = useCallback(
+    (product: ProductEntry) => startInstall(product, 'install'),
+    [startInstall]
+  )
+
+  const repair = useCallback(
+    (product: ProductEntry) => startInstall(product, 'repair'),
+    [startInstall]
   )
 
   const launch = useCallback(
@@ -416,6 +462,128 @@ function App(): JSX.Element {
     [bridge, config, refreshLibrary, loadCatalog]
   )
 
+  const installedById = useMemo(
+    () => new Map(library.map((product) => [product.id, product])),
+    [library]
+  )
+
+  const updateFor = useCallback(
+    (product: ProductEntry): string | null => {
+      if (!product.release) return null
+      const installed = installedById.get(product.id)
+      if (!installed) return null
+      const latest = versionFromRelease(product.release)
+      if (!isUpdateAvailable(installed.version, latest)) return null
+      if (config?.skippedUpdates?.[product.id] === latest) return null
+      return latest
+    },
+    [installedById, config?.skippedUpdates]
+  )
+
+  const isUpdateSkipped = useCallback(
+    (product: ProductEntry): boolean => {
+      if (!product.release || !config) return false
+      const installed = installedById.get(product.id)
+      if (!installed) return false
+      const latest = versionFromRelease(product.release)
+      return (
+        isUpdateAvailable(installed.version, latest) &&
+        config.skippedUpdates[product.id] === latest
+      )
+    },
+    [installedById, config]
+  )
+
+  const skipUpdate = useCallback(
+    async (product: ProductEntry): Promise<void> => {
+      if (!config || !product.release) return
+      const latest = versionFromRelease(product.release)
+      try {
+        await saveSettings({
+          skippedUpdates: { ...config.skippedUpdates, [product.id]: latest }
+        })
+        toast(`Skipped ${product.name} ${versionLabel(latest)}.`, 'info')
+      } catch (error) {
+        toast(errorMessage(error), 'error')
+      }
+    },
+    [config, saveSettings, toast]
+  )
+
+  const unskipUpdate = useCallback(
+    async (productId: string): Promise<void> => {
+      if (!config) return
+      const next = { ...config.skippedUpdates }
+      delete next[productId]
+      try {
+        await saveSettings({ skippedUpdates: next })
+      } catch (error) {
+        toast(errorMessage(error), 'error')
+      }
+    },
+    [config, saveSettings, toast]
+  )
+
+  const updateAll = useCallback(async (): Promise<void> => {
+    if (!bridge || !catalog) return
+    const targets = catalog.products.filter(
+      (product) =>
+        updateFor(product) !== null &&
+        !running.includes(product.id) &&
+        !activeTaskFor(tasks, product.id)
+    )
+    if (targets.length === 0) {
+      toast('Everything installed is already up to date.', 'info')
+      return
+    }
+
+    let queued = 0
+    for (const product of targets) {
+      try {
+        await bridge.startInstall(toInstallRequest(product))
+        queued += 1
+      } catch (error) {
+        toast(errorMessage(error), 'error')
+      }
+    }
+    if (queued > 0) {
+      setView('downloads')
+      toast(`Queued ${queued} update${queued === 1 ? '' : 's'}.`, 'success')
+    }
+  }, [bridge, catalog, updateFor, running, tasks, toast])
+
+  const openPalette = useCallback(() => setPaletteOpen(true), [])
+  const closePalette = useCallback(() => setPaletteOpen(false), [])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      const meta = event.metaKey || event.ctrlKey
+      const key = event.key.toLowerCase()
+
+      if (meta && key === 'k') {
+        event.preventDefault()
+        setPaletteOpen((open) => !open)
+        return
+      }
+
+      if (event.key === 'Escape') {
+        setPaletteOpen(false)
+        setSelected(null)
+        return
+      }
+
+      // Ctrl/Cmd + 1-4 jumps between the four views.
+      if (meta && /^[1-4]$/.test(event.key)) {
+        event.preventDefault()
+        const target = VIEW_ORDER[Number(event.key) - 1]
+        if (target) setView(target)
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
   const cancelTask = useCallback(
     async (taskId: string): Promise<void> => {
       if (!bridge) return
@@ -493,9 +661,14 @@ function App(): JSX.Element {
       library,
       tasks,
       running,
+      playState,
       demoMode,
       busyProductId,
+      repairingId,
       selected,
+      paletteOpen,
+      openPalette,
+      closePalette,
       openProduct: (product: ProductEntry) => setSelected(product),
       closeProduct: () => setSelected(null),
       refreshCatalog: loadCatalog,
@@ -507,6 +680,12 @@ function App(): JSX.Element {
       setTheme,
       openExternal,
       install,
+      repair,
+      updateAll,
+      updateFor,
+      isUpdateSkipped,
+      skipUpdate,
+      unskipUpdate,
       launch,
       requestUninstall,
       openFolder,
@@ -531,8 +710,13 @@ function App(): JSX.Element {
       library,
       tasks,
       running,
+      playState,
       busyProductId,
+      repairingId,
       selected,
+      paletteOpen,
+      openPalette,
+      closePalette,
       loadCatalog,
       refreshLibrary,
       checkLauncherUpdate,
@@ -542,6 +726,12 @@ function App(): JSX.Element {
       setTheme,
       openExternal,
       install,
+      repair,
+      updateAll,
+      updateFor,
+      isUpdateSkipped,
+      skipUpdate,
+      unskipUpdate,
       launch,
       requestUninstall,
       openFolder,
@@ -591,6 +781,8 @@ function App(): JSX.Element {
         <StatusBar />
 
         {selected && <ProductDrawer />}
+
+        {paletteOpen && <CommandPalette />}
 
         {confirmProduct && (
           <ConfirmDialog

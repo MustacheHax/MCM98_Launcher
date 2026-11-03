@@ -240,18 +240,21 @@ function describe(error: unknown, context: 'repo' | 'release'): string {
 
 /**
  * Opens a release asset through the GitHub API. Works for public and private
- * repositories; the token is never exposed to the client.
+ * repositories; the token is never exposed to the client. A `range` header is
+ * forwarded so the launcher can resume an interrupted download.
  */
 export async function openAssetStream(
   repo: string,
   assetId: number,
-  signal: AbortSignal
+  signal: AbortSignal,
+  range?: string | null
 ): Promise<Response> {
   const state = readToken()
-  const headers = {
+  const headers: Record<string, string> = {
     ...authHeaders(),
     Accept: 'application/octet-stream'
   }
+  if (range) headers.Range = range
   let response: Response
   try {
     response = await fetch(`${API_BASE}/repos/${repo}/releases/assets/${assetId}`, {

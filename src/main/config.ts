@@ -9,7 +9,12 @@ import {
 import { join, parse, resolve } from 'node:path'
 import { DEFAULT_TEXT_SIZE, isTextSize } from '@shared/textSize'
 import { DEFAULT_THEME, isThemeId } from '@shared/themes'
-import type { LaunchView, LauncherConfig, LauncherLayout } from '@shared/types'
+import type {
+  LaunchView,
+  LauncherConfig,
+  LauncherLayout,
+  WindowBounds
+} from '@shared/types'
 import type { Logger } from './logger'
 
 /** Relay used by packaged builds when nothing else is configured. */
@@ -34,6 +39,7 @@ const LEGACY_DEFAULT_BACKENDS = new Set([
 
 const LAYOUTS: LauncherLayout[] = ['compact', 'full']
 const START_VIEWS: LaunchView[] = ['library', 'catalog', 'downloads']
+const SETTING_ID = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 export function isLauncherLayout(value: unknown): value is LauncherLayout {
   return typeof value === 'string' && LAYOUTS.includes(value as LauncherLayout)
@@ -56,10 +62,48 @@ interface StoredConfig {
   autoCheckLauncher?: unknown
   autoCheckProducts?: unknown
   confirmUninstall?: unknown
+  skippedUpdates?: unknown
+  windowBounds?: unknown
 }
 
 function storedBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback
+}
+
+/** Skipped release versions are keyed by product id, so they survive updates. */
+function sanitizeSkippedUpdates(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object') return {}
+  const result: Record<string, string> = {}
+  for (const [id, version] of Object.entries(value as Record<string, unknown>)) {
+    if (!SETTING_ID.test(id)) continue
+    if (typeof version !== 'string' || !version.trim()) continue
+    result[id] = version.trim().slice(0, 80)
+  }
+  return result
+}
+
+/** Saved window bounds; anything absurd is dropped so the window stays reachable. */
+function sanitizeWindowBounds(value: unknown): Partial<Record<LauncherLayout, WindowBounds>> {
+  if (!value || typeof value !== 'object') return {}
+  const result: Partial<Record<LauncherLayout, WindowBounds>> = {}
+  for (const layout of LAYOUTS) {
+    const raw = (value as Record<string, unknown>)[layout]
+    if (!raw || typeof raw !== 'object') continue
+    const item = raw as Record<string, unknown>
+    const x = Number(item.x)
+    const y = Number(item.y)
+    const width = Number(item.width)
+    const height = Number(item.height)
+    if (![x, y, width, height].every((number) => Number.isFinite(number))) continue
+    if (width < 240 || height < 240) continue
+    result[layout] = {
+      x: Math.round(x),
+      y: Math.round(y),
+      width: Math.round(width),
+      height: Math.round(height)
+    }
+  }
+  return result
 }
 
 export class ConfigStore {
@@ -85,7 +129,9 @@ export class ConfigStore {
       launchAtLogin: false,
       autoCheckLauncher: true,
       autoCheckProducts: true,
-      confirmUninstall: true
+      confirmUninstall: true,
+      skippedUpdates: {},
+      windowBounds: {}
     }
     this.current = this.load(defaults)
     this.migrateLegacyBackend(defaults.backendUrl)
@@ -136,7 +182,9 @@ export class ConfigStore {
         launchAtLogin: storedBoolean(stored.launchAtLogin, defaults.launchAtLogin),
         autoCheckLauncher: storedBoolean(stored.autoCheckLauncher, defaults.autoCheckLauncher),
         autoCheckProducts: storedBoolean(stored.autoCheckProducts, defaults.autoCheckProducts),
-        confirmUninstall: storedBoolean(stored.confirmUninstall, defaults.confirmUninstall)
+        confirmUninstall: storedBoolean(stored.confirmUninstall, defaults.confirmUninstall),
+        skippedUpdates: sanitizeSkippedUpdates(stored.skippedUpdates),
+        windowBounds: sanitizeWindowBounds(stored.windowBounds)
       }
       if (
         !backendUrl ||
@@ -195,7 +243,15 @@ export class ConfigStore {
       confirmUninstall:
         typeof patch.confirmUninstall === 'boolean'
           ? patch.confirmUninstall
-          : this.current.confirmUninstall
+          : this.current.confirmUninstall,
+      skippedUpdates:
+        patch.skippedUpdates === undefined
+          ? this.current.skippedUpdates
+          : sanitizeSkippedUpdates(patch.skippedUpdates),
+      windowBounds:
+        patch.windowBounds === undefined
+          ? this.current.windowBounds
+          : sanitizeWindowBounds(patch.windowBounds)
     }
 
     this.persist(next)
@@ -211,7 +267,13 @@ export class ConfigStore {
   }
 
   private persist(config: LauncherConfig): void {
-    mkdirSync(config.installRoot, { recursive: true })
+    // The installer creates the library on demand. A missing or disconnected
+    // drive must not stop unrelated settings from being saved.
+    try {
+      mkdirSync(config.installRoot, { recursive: true })
+    } catch (error) {
+      this.log.warn(`Could not create the install folder ${config.installRoot}.`, error)
+    }
     mkdirSync(this.dataRoot, { recursive: true })
     const tempPath = `${this.configPath}.tmp`
     writeFileSync(tempPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8')

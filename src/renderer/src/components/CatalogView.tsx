@@ -1,15 +1,7 @@
 import { useMemo } from 'react'
 import type { ProductEntry } from '@shared/types'
 import { useApp } from '../state'
-import {
-  findInstalled,
-  formatBytes,
-  formatDate,
-  isUpdateAvailable,
-  platformLabel,
-  productTags,
-  versionLabel
-} from '../utils'
+import { formatBytes, formatDate, platformLabel, productTags, releaseVersionLabel } from '../utils'
 import { PageHeader } from './PageHeader'
 import { Cover } from './Cover'
 import { Icon } from './Icons'
@@ -179,11 +171,8 @@ export function CatalogView(): JSX.Element {
 }
 
 function FeaturedHero({ product }: { product: ProductEntry }): JSX.Element {
-  const { library, openProduct, running, tasks } = useApp()
-  const installed = findInstalled(library, product.id)
-  const updateAvailable = Boolean(
-    installed && product.release && isUpdateAvailable(installed.version, product.release.tag)
-  )
+  const { openProduct, running, tasks, updateFor } = useApp()
+  const updateAvailable = Boolean(updateFor(product))
   const task = tasks.find(
     (item) => item.productId === product.id && !['done', 'error', 'cancelled'].includes(item.phase)
   )
@@ -223,7 +212,7 @@ function FeaturedHero({ product }: { product: ProductEntry }): JSX.Element {
         </div>
         {product.release && (
           <div className="hero-meta">
-            <span className="mono">{versionLabel(product.release.tag)}</span>
+            <span className="mono">{releaseVersionLabel(product.release)}</span>
             <span className="dot-sep" />
             <span>{formatBytes(product.release.asset.size)}</span>
             <span className="dot-sep" />

@@ -1,5 +1,6 @@
 import type {
   AppInfo,
+  BackupResult,
   CatalogResponse,
   HealthResponse,
   InstallRequest,
@@ -8,8 +9,11 @@ import type {
   LauncherApi,
   LauncherConfig,
   LauncherUpdateInfo,
+  PlayRecord,
+  PlayState,
   ProductEntry,
-  Platform
+  Platform,
+  SaveInfo
 } from '@shared/types'
 
 const DEMO_LIBRARY_ROOT = 'C:\\Games\\MCM98'
@@ -216,10 +220,40 @@ export function createDemoApi(): LauncherApi {
     launchAtLogin: false,
     autoCheckLauncher: true,
     autoCheckProducts: true,
-    confirmUninstall: true
+    confirmUninstall: true,
+    skippedUpdates: {},
+    windowBounds: {}
   }
   let installed = seedLibrary()
   let sequence = 0
+
+  const playRecords = new Map<string, PlayRecord>([
+    [
+      'hollow-signal',
+      {
+        productId: 'hollow-signal',
+        lastPlayedAt: new Date(Date.now() - 95 * 60_000).toISOString(),
+        playtimeMs: 4.4 * 60 * 60_000,
+        launches: 7
+      }
+    ],
+    [
+      'foundry-tools',
+      {
+        productId: 'foundry-tools',
+        lastPlayedAt: new Date(Date.now() - 3 * 24 * 60 * 60_000).toISOString(),
+        playtimeMs: 1.1 * 60 * 60_000,
+        launches: 2
+      }
+    ]
+  ])
+  const playStateListeners = new Set<(state: PlayState) => void>()
+  const snapshotPlayState = (): PlayState =>
+    Object.fromEntries([...playRecords].map(([id, record]) => [id, { ...record }]))
+  const emitPlayState = (): void => {
+    const snapshot = snapshotPlayState()
+    for (const listener of playStateListeners) listener(snapshot)
+  }
 
   const tasks = new Map<string, InstallTask>()
   const cancelled = new Set<string>()
@@ -375,7 +409,9 @@ export function createDemoApi(): LauncherApi {
         launchAtLogin: patch.launchAtLogin ?? config.launchAtLogin,
         autoCheckLauncher: patch.autoCheckLauncher ?? config.autoCheckLauncher,
         autoCheckProducts: patch.autoCheckProducts ?? config.autoCheckProducts,
-        confirmUninstall: patch.confirmUninstall ?? config.confirmUninstall
+        confirmUninstall: patch.confirmUninstall ?? config.confirmUninstall,
+        skippedUpdates: patch.skippedUpdates ?? config.skippedUpdates,
+        windowBounds: patch.windowBounds ?? config.windowBounds
       }
       try {
         void new URL(next.backendUrl)
@@ -577,11 +613,51 @@ export function createDemoApi(): LauncherApi {
       if (running.has(productId)) throw new Error('That product is already running.')
       running.add(productId)
       emitRunning()
+
+      const existing = playRecords.get(productId)
+      playRecords.set(productId, {
+        productId,
+        lastPlayedAt: new Date().toISOString(),
+        playtimeMs: existing?.playtimeMs ?? 0,
+        launches: (existing?.launches ?? 0) + 1
+      })
+      emitPlayState()
+
       return { pid: 42000 + installed.indexOf(product) }
     },
 
     async getRunning() {
       return [...running]
+    },
+
+    async getPlayState() {
+      return snapshotPlayState()
+    },
+
+    async getSaveInfo(productId) {
+      await wait(90)
+      const product = installed.find((item) => item.id === productId)
+      if (!product) {
+        return { path: null, source: null, exists: false } satisfies SaveInfo
+      }
+      return {
+        path: `C:\\Users\\Demo\\AppData\\Roaming\\${product.name.replace(/\s+/g, '')}`,
+        source: 'appData',
+        exists: true
+      } satisfies SaveInfo
+    },
+
+    async openSaveFolder() {
+      await wait(80)
+    },
+
+    async backupSaves(productId) {
+      await wait(900)
+      const result: BackupResult = {
+        path: `C:\\Users\\Demo\\AppData\\Roaming\\MCM98 Launcher\\backups\\${productId}-saves-${Date.now()}.tar.gz`,
+        bytes: 18_874_368
+      }
+      return result
     },
 
     async openPath() {
@@ -610,6 +686,11 @@ export function createDemoApi(): LauncherApi {
     onLauncherUpdate(callback) {
       updateListeners.add(callback)
       return () => updateListeners.delete(callback)
+    },
+
+    onPlayStateChanged(callback) {
+      playStateListeners.add(callback)
+      return () => playStateListeners.delete(callback)
     }
   }
 }

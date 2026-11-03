@@ -1,13 +1,6 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useApp } from '../state'
-import {
-  activeTaskFor,
-  formatBytes,
-  formatDate,
-  isUpdateAvailable,
-  isTerminalPhase,
-  versionLabel
-} from '../utils'
+import { activeTaskFor, formatBytes, formatDate, isTerminalPhase, playSummary, versionLabel } from '../utils'
 import { PageHeader } from './PageHeader'
 import { Cover } from './Cover'
 import { Icon } from './Icons'
@@ -28,23 +21,51 @@ export function LibraryView(): JSX.Element {
     openProduct,
     running,
     tasks,
-    busyProductId
+    busyProductId,
+    playState,
+    updateAll,
+    updateFor,
+    repair,
+    repairingId
   } = useApp()
+
+  const [query, setQuery] = useState('')
+  const [sort, setSort] = useState<'name' | 'recent' | 'size'>('name')
+  const [updatesOnly, setUpdatesOnly] = useState(false)
 
   const updateMap = useMemo(() => {
     const map = new Map<string, string>()
     if (!catalog) return map
-    for (const installed of library) {
-      const product = catalog.products.find((item) => item.id === installed.id)
-      if (product?.release && isUpdateAvailable(installed.version, product.release.tag)) {
-        map.set(installed.id, product.release.tag)
-      }
+    for (const product of catalog.products) {
+      const latest = updateFor(product)
+      if (latest) map.set(product.id, latest)
     }
     return map
-  }, [catalog, library])
+  }, [catalog, updateFor])
 
   const totalSize = library.reduce((sum, product) => sum + product.sizeBytes, 0)
   const activeDownloads = tasks.filter((task) => !isTerminalPhase(task.phase)).length
+
+  const lastPlayed = (productId: string): number => {
+    const iso = playState[productId]?.lastPlayedAt
+    return iso ? Date.parse(iso) || 0 : 0
+  }
+
+  const visible = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    const rows = library.filter((product) => {
+      if (updatesOnly && !updateMap.has(product.id)) return false
+      if (!needle) return true
+      return `${product.name} ${product.repo}`.toLowerCase().includes(needle)
+    })
+
+    return rows.sort((a, b) => {
+      if (sort === 'size') return b.sizeBytes - a.sizeBytes
+      if (sort === 'recent') return lastPlayed(b.id) - lastPlayed(a.id)
+      return a.name.localeCompare(b.name)
+    })
+    // lastPlayed reads playState, which is listed below.
+  }, [library, query, sort, updatesOnly, updateMap, playState])
 
   return (
     <div className="view library-view">
@@ -54,6 +75,15 @@ export function LibraryView(): JSX.Element {
         description="Everything the launcher has downloaded, ready to launch. Updates are pulled from each product's newest GitHub release."
         actions={
           <div className="header-actions">
+            <button
+              className="btn btn-primary"
+              onClick={() => void updateAll()}
+              disabled={updateMap.size === 0}
+              title="Queue every available product update"
+            >
+              <Icon name="download" size={15} />
+              Update all{updateMap.size > 0 ? ` (${updateMap.size})` : ''}
+            </button>
             <button className="btn btn-ghost" onClick={() => void openFolder()}>
               <Icon name="folder" size={15} />
               Install folder
@@ -71,6 +101,58 @@ export function LibraryView(): JSX.Element {
       />
 
       <WhatsNewCard />
+
+      {catalog?.stale && (
+        <div className="inline-alert" role="status">
+          <Icon name="alert" size={16} />
+          <span>
+            Showing the catalog saved {formatDate(catalog.cachedAt)}. The relay is not answering.
+          </span>
+          <button className="text-button" onClick={() => void refreshCatalog()}>
+            Retry
+          </button>
+        </div>
+      )}
+
+      {library.length > 0 && (
+        <div className="library-toolbar">
+          <label className="search-box">
+            <Icon name="search" size={16} />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search your library"
+              aria-label="Search library"
+            />
+          </label>
+
+          <div className="library-toolbar-right">
+            <button
+              type="button"
+              className={`chip chip-filter ${updatesOnly ? 'is-on' : ''}`}
+              aria-pressed={updatesOnly}
+              onClick={() => setUpdatesOnly((value) => !value)}
+            >
+              <Icon name="spark" size={12} />
+              Updates only
+            </button>
+            <label className="sort-select">
+              <Icon name="sort" size={14} />
+              <select
+                value={sort}
+                onChange={(event) =>
+                  setSort(event.target.value as 'name' | 'recent' | 'size')
+                }
+                aria-label="Sort library"
+              >
+                <option value="name">Name</option>
+                <option value="recent">Recently played</option>
+                <option value="size">Largest first</option>
+              </select>
+            </label>
+          </div>
+        </div>
+      )}
 
       {library.length > 0 && (
         <div className="stat-row">
@@ -125,9 +207,30 @@ export function LibraryView(): JSX.Element {
             </button>
           }
         />
+      ) : visible.length === 0 ? (
+        <EmptyState
+          icon="search"
+          title="Nothing matched"
+          description={
+            updatesOnly && updateMap.size === 0
+              ? 'Every installed product is up to date. Clear the filter to see the full library.'
+              : `No installed product matches “${query.trim()}”. Try a different search.`
+          }
+          action={
+            <button
+              className="btn"
+              onClick={() => {
+                setQuery('')
+                setUpdatesOnly(false)
+              }}
+            >
+              Clear filters
+            </button>
+          }
+        />
       ) : (
         <div className="library-list">
-          {library.map((product) => {
+          {visible.map((product) => {
             const latest = updateMap.get(product.id)
             const catalogProduct = catalog?.products.find((item) => item.id === product.id)
             const task = activeTaskFor(tasks, product.id)
@@ -174,6 +277,12 @@ export function LibraryView(): JSX.Element {
                     <span className="dot-sep" />
                     <span className="mono">{formatBytes(product.sizeBytes)}</span>
                   </div>
+                  {playSummary(playState[product.id]) && (
+                    <div className="lib-played">
+                      <Icon name="clock" size={12} />
+                      <span>{playSummary(playState[product.id])}</span>
+                    </div>
+                  )}
                   <code className="lib-path" title={product.installPath}>
                     {product.installPath}
                   </code>
@@ -185,6 +294,16 @@ export function LibraryView(): JSX.Element {
                       <span className="pulse-dot" />
                       Playing
                     </span>
+                  ) : !product.executablePath && catalogProduct ? (
+                    <button
+                      className="btn btn-outline btn-sm"
+                      onClick={() => void repair(catalogProduct)}
+                      disabled={busy || repairingId === product.id || Boolean(task)}
+                      title="The recorded executable is missing; reinstall this build"
+                    >
+                      <Icon name="refresh" size={13} />
+                      {repairingId === product.id ? 'Repairing…' : 'Repair'}
+                    </button>
                   ) : (
                     <button
                       className="btn btn-primary btn-sm"

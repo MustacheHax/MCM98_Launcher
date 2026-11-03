@@ -4,8 +4,8 @@ import {
   activeTaskFor,
   findInstalled,
   formatBytes,
-  isUpdateAvailable,
   platformLabel,
+  releaseVersionLabel,
   versionLabel
 } from '../utils'
 import { Cover } from './Cover'
@@ -13,13 +13,12 @@ import { Icon } from './Icons'
 import { ProductActions } from './ProductActions'
 
 export function ProductCard({ product }: { product: ProductEntry }): JSX.Element {
-  const { library, tasks, running, openProduct } = useApp()
+  const { library, tasks, running, openProduct, updateFor, isUpdateSkipped } = useApp()
   const installed = findInstalled(library, product.id)
   const task = activeTaskFor(tasks, product.id)
   const isRunning = running.includes(product.id)
-  const updateAvailable = Boolean(
-    installed && product.release && isUpdateAvailable(installed.version, product.release.tag)
-  )
+  const updateAvailable = Boolean(updateFor(product))
+  const updateSkipped = isUpdateSkipped(product)
   const primaryTag = product.tags[0]
 
   return (
@@ -39,6 +38,7 @@ export function ProductCard({ product }: { product: ProductEntry }): JSX.Element
               </span>
             )}
             {updateAvailable && <span className="chip chip-accent">Update</span>}
+            {updateSkipped && <span className="chip">Skipped</span>}
             {isRunning && (
               <span className="chip chip-live">
                 <span className="pulse-dot" />
@@ -52,7 +52,7 @@ export function ProductCard({ product }: { product: ProductEntry }): JSX.Element
           <h3>{product.name}</h3>
         </div>
         {product.release && (
-          <span className="card-version">{versionLabel(product.release.tag)}</span>
+          <span className="card-version">{releaseVersionLabel(product.release)}</span>
         )}
       </div>
 

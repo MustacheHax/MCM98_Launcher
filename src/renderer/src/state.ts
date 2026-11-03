@@ -7,6 +7,7 @@ import type {
   InstalledProduct,
   LauncherConfig,
   LauncherUpdateInfo,
+  PlayState,
   ProductEntry
 } from '@shared/types'
 
@@ -29,9 +30,14 @@ export interface AppContextValue {
   library: InstalledProduct[]
   tasks: InstallTask[]
   running: string[]
+  playState: PlayState
   demoMode: boolean
   busyProductId: string | null
+  repairingId: string | null
   selected: ProductEntry | null
+  paletteOpen: boolean
+  openPalette: () => void
+  closePalette: () => void
   openProduct: (product: ProductEntry) => void
   closeProduct: () => void
   refreshCatalog: () => Promise<void>
@@ -43,6 +49,14 @@ export interface AppContextValue {
   setTheme: (theme: ThemeId) => Promise<void>
   openExternal: (url: string) => Promise<void>
   install: (product: ProductEntry) => Promise<void>
+  repair: (product: ProductEntry) => Promise<void>
+  updateAll: () => Promise<void>
+  /** Comparable version of an available update, or null when there is none. */
+  updateFor: (product: ProductEntry) => string | null
+  /** True when the newest available update was explicitly skipped. */
+  isUpdateSkipped: (product: ProductEntry) => boolean
+  skipUpdate: (product: ProductEntry) => Promise<void>
+  unskipUpdate: (productId: string) => Promise<void>
   launch: (productId: string) => Promise<void>
   requestUninstall: (product: InstalledProduct) => void
   openFolder: (productId?: string) => Promise<void>

@@ -1,12 +1,6 @@
 import type { ProductEntry } from '@shared/types'
 import { useApp } from '../state'
-import {
-  activeTaskFor,
-  findInstalled,
-  isUpdateAvailable,
-  phaseLabel,
-  taskProgress
-} from '../utils'
+import { activeTaskFor, findInstalled, phaseLabel, taskProgress } from '../utils'
 import { Icon } from './Icons'
 
 interface ProductActionsProps {
@@ -15,13 +9,11 @@ interface ProductActionsProps {
 }
 
 export function ProductActions({ product, size = 'sm' }: ProductActionsProps): JSX.Element {
-  const { library, tasks, running, install, launch, busyProductId, navigate } = useApp()
+  const { library, tasks, running, install, launch, busyProductId, navigate, updateFor } = useApp()
   const installed = findInstalled(library, product.id)
   const task = activeTaskFor(tasks, product.id)
   const isRunning = running.includes(product.id)
-  const updateAvailable = Boolean(
-    installed && product.release && isUpdateAvailable(installed.version, product.release.tag)
-  )
+  const updateAvailable = Boolean(updateFor(product))
   const busy = busyProductId === product.id
   const sizeClass = size === 'sm' ? 'btn-sm' : ''
   const progress = task ? Math.round(taskProgress(task)) : 0

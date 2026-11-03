@@ -354,9 +354,13 @@ export class LauncherUpdater {
       const result = await downloadFile({
         url: input.url,
         destination: input.destination,
+        partialPath: `${input.destination}.part`,
         expectedBytes: input.totalBytes,
         digest: input.digest,
         signal: input.signal,
+        onResume: (existingBytes) => {
+          this.log.info(`Resuming the launcher update at ${existingBytes} bytes.`)
+        },
         onProgress: (received, total) => {
           const now = Date.now()
           const progress = { ...this.info.progress }

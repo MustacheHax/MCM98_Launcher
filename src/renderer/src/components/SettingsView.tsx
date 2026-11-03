@@ -8,7 +8,8 @@ import {
   formatDate,
   formatSpeed,
   launcherReleaseLabel,
-  platformLabel
+  platformLabel,
+  versionLabel
 } from '../utils'
 import { PageHeader } from './PageHeader'
 import { Icon, type IconName } from './Icons'
@@ -114,6 +115,8 @@ function SettingToggle({
 export function SettingsView(): JSX.Element {
   const {
     config,
+    catalog,
+    unskipUpdate,
     appInfo,
     library,
     saveSettings,
@@ -140,6 +143,10 @@ export function SettingsView(): JSX.Element {
     setBackendUrl(config?.backendUrl ?? '')
     setInstallRoot(config?.installRoot ?? '')
   }, [config?.backendUrl, config?.installRoot])
+
+  const skipped = Object.entries(config?.skippedUpdates ?? {}).sort(([a], [b]) =>
+    a.localeCompare(b)
+  )
 
   const urlError = validateUrl(backendUrl)
   const rootError = installRoot.trim() ? null : 'Choose an install folder.'
@@ -816,6 +823,43 @@ export function SettingsView(): JSX.Element {
                     )}
                   </div>
                 </div>
+              </section>
+
+              <section className="panel settings-panel">
+                <div className="panel-heading">
+                  <span className="panel-icon">
+                    <Icon name="alert" size={18} />
+                  </span>
+                  <div>
+                    <h2>Skipped versions</h2>
+                    <p>
+                      Skipping a version hides its update prompt. A newer release always prompts
+                      again, so nothing is permanently pinned.
+                    </p>
+                  </div>
+                </div>
+
+                {skipped.length === 0 ? (
+                  <p className="settings-note">No versions are skipped.</p>
+                ) : (
+                  <ul className="skipped-list">
+                    {skipped.map(([productId, version]) => (
+                      <li key={productId}>
+                        <span className="skipped-name">
+                          {catalog?.products.find((product) => product.id === productId)?.name ??
+                            productId}
+                        </span>
+                        <span className="mono skipped-version">{versionLabel(version)}</span>
+                        <button
+                          className="text-button"
+                          onClick={() => void unskipUpdate(productId)}
+                        >
+                          Update again
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </section>
             </div>
           )}

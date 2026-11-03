@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { chmod, readdir, rename } from 'node:fs/promises'
+import { chmod, readdir, rename, stat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import type {
   InstallPhase,
@@ -26,6 +27,8 @@ import type { Logger } from './logger'
 const MAX_CONCURRENT_INSTALLS = 2
 const MAX_ASSET_BYTES = 16 * 1024 * 1024 * 1024
 const ARCHIVE_ASSET = /\.(zip|tar\.gz|tgz)$/i
+/** Partial downloads are resumable, but abandoned ones are eventually swept. */
+const PARTIAL_RETENTION_MS = 14 * 24 * 60 * 60 * 1000
 
 function isDirectExecutable(assetName: string, platform: Platform): boolean {
   if (platform === 'win32') return /\.exe$/i.test(assetName)
@@ -166,6 +169,7 @@ export class InstallManager {
     await removePath(join(root, '.tmp')).catch((error) => {
       this.log.warn('Could not clear the temporary download folder.', error)
     })
+    await this.prunePartials()
 
     let entries
     try {
@@ -240,6 +244,7 @@ export class InstallManager {
     const productDir = productDirectory(installRoot, request.productId)
     const temporaryDir = join(installRoot, '.tmp', task.id)
     const downloadPath = join(temporaryDir, 'archive')
+    const partialPath = this.partialPath(request)
     const stagingDir = join(productDir, `.staging-${task.id}`)
 
     const controller = new AbortController()
@@ -254,10 +259,16 @@ export class InstallManager {
       const download = await downloadFile({
         url: request.downloadUrl,
         destination: downloadPath,
+        partialPath,
         expectedBytes: request.sizeBytes,
         digest: request.digest,
         signal,
         onProgress: (received, total) => this.updateProgress(record, received, total),
+        onResume: (existingBytes) => {
+          task.message = `Resuming ${request.assetName} from ${describeBytes(existingBytes)}`
+          this.log.info(`Resuming ${request.productId} at ${existingBytes} bytes.`)
+          this.broadcast(true)
+        },
         onDownloaded: () => {
           task.speedBytesPerSec = 0
           task.message = 'Verifying download'
@@ -414,6 +425,53 @@ export class InstallManager {
     }
   }
 
+  /**
+   * Partial downloads are keyed by product and asset, so a retry of the same
+   * release continues where it stopped while a new release starts clean.
+   */
+  private partialPath(request: InstallRequest): string {
+    const key = createHash('sha1')
+      .update(`${request.productId}|${request.assetName}|${request.sizeBytes}|${request.digest ?? ''}`)
+      .digest('hex')
+      .slice(0, 16)
+    return join(this.options.config.dataRoot, 'downloads', `${request.productId}-${key}.part`)
+  }
+
+  private async prunePartials(): Promise<void> {
+    const folder = join(this.options.config.dataRoot, 'downloads')
+    let entries: string[]
+    try {
+      entries = await readdir(folder)
+    } catch {
+      return
+    }
+
+    const cutoff = Date.now() - PARTIAL_RETENTION_MS
+    for (const name of entries) {
+      if (!name.endsWith('.part')) continue
+      const file = join(folder, name)
+      const info = await stat(file).catch(() => null)
+      if (!info || info.mtimeMs >= cutoff) continue
+      await removePath(file).catch(() => undefined)
+      this.log.info(`Removed an abandoned partial download: ${name}.`)
+    }
+  }
+
+  /** Drops every partial download belonging to one product. */
+  async clearPartials(productId: string): Promise<void> {
+    const folder = join(this.options.config.dataRoot, 'downloads')
+    let entries: string[]
+    try {
+      entries = await readdir(folder)
+    } catch {
+      return
+    }
+    for (const name of entries) {
+      if (!name.startsWith(`${productId}-`) || !name.endsWith('.part')) continue
+      await removePath(join(folder, name)).catch(() => undefined)
+    }
+  }
+
   private updateProgress(record: TaskRecord, receivedBytes: number, totalBytes: number): void {
     const { task } = record
     const now = Date.now()
@@ -530,6 +588,14 @@ export class InstallManager {
 
 function isTerminal(phase: InstallPhase): boolean {
   return phase === 'done' || phase === 'error' || phase === 'cancelled'
+}
+
+function describeBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 MB'
+  const units = ['B', 'KB', 'MB', 'GB']
+  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+  const value = bytes / 1024 ** exponent
+  return `${value >= 100 || exponent === 0 ? Math.round(value) : value.toFixed(1)} ${units[exponent]}`
 }
 
 function cleanText(value: unknown, maxLength: number): string {

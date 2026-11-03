@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { IPC } from '@shared/channels'
 import type {
   AppInfo,
+  BackupResult,
   CatalogResponse,
   HealthResponse,
   InstallRequest,
@@ -9,7 +10,9 @@ import type {
   InstalledProduct,
   LauncherApi,
   LauncherConfig,
-  LauncherUpdateInfo
+  LauncherUpdateInfo,
+  PlayState,
+  SaveInfo
 } from '@shared/types'
 
 function subscribe<T>(channel: string, callback: (payload: T) => void): () => void {
@@ -50,6 +53,14 @@ const api: LauncherApi = {
   launch: (productId) =>
     ipcRenderer.invoke(IPC.launch, productId) as Promise<{ pid: number }>,
   getRunning: () => ipcRenderer.invoke(IPC.getRunning) as Promise<string[]>,
+  getPlayState: () => ipcRenderer.invoke(IPC.getPlayState) as Promise<PlayState>,
+
+  getSaveInfo: (productId) =>
+    ipcRenderer.invoke(IPC.getSaveInfo, productId) as Promise<SaveInfo>,
+  openSaveFolder: (productId) =>
+    ipcRenderer.invoke(IPC.openSaveFolder, productId) as Promise<void>,
+  backupSaves: (productId) =>
+    ipcRenderer.invoke(IPC.backupSaves, productId) as Promise<BackupResult>,
 
   openPath: (target, productId) =>
     ipcRenderer.invoke(IPC.openPath, target, productId) as Promise<void>,
@@ -59,7 +70,8 @@ const api: LauncherApi = {
   onLibraryChanged: (callback) => subscribe<void>(IPC.libraryChanged, () => callback()),
   onRunningChanged: (callback) => subscribe<string[]>(IPC.runningChanged, callback),
   onLauncherUpdate: (callback) =>
-    subscribe<LauncherUpdateInfo>(IPC.launcherUpdateChanged, callback)
+    subscribe<LauncherUpdateInfo>(IPC.launcherUpdateChanged, callback),
+  onPlayStateChanged: (callback) => subscribe<PlayState>(IPC.playStateChanged, callback)
 }
 
 contextBridge.exposeInMainWorld('launcher', api)

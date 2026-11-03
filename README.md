@@ -12,7 +12,13 @@ GitHub Releases ──► Render relay ──► Electron launcher ──► loc
 
 ## What is included
 
-- **Desktop launcher** — Electron + React + TypeScript, twelve complete appearance themes, generated cover art, install/update/play/uninstall flows, download queue, settings, logs.
+- **Desktop launcher** — Electron + React + TypeScript, twenty-two complete appearance themes across eleven families, generated cover art, install/update/play/uninstall flows, download queue, settings, logs.
+- **Library tools** — search, sort by name / recently played / size, an updates-only filter, **Update all**, per-product **Skip this version**, and **Repair install** when the recorded executable is missing.
+- **Play history** — last played, total playtime, and launch counts per product. Running sessions survive a launcher restart, so updates and uninstalls stay blocked while a game is open even after relaunching the launcher.
+- **Saves** — each install exposes its detected save folder and can archive it to `backups/` as a `.tar.gz` in one click.
+- **Resumable downloads** — an interrupted transfer continues from its partial file using HTTP range requests, including assets streamed through the relay.
+- **Offline catalog cache** — when the relay is asleep, the library still shows the last resolved catalog and flags it as cached.
+- **Command palette** — `Ctrl/Cmd + K` jumps to any view, product, or maintenance action; `Ctrl/Cmd + 1-4` switches views.
 - **Relay** — Express + TypeScript API suitable for Render. It reads a developer-owned catalog, resolves GitHub releases server-side, caches responses, and streams private release assets without exposing a GitHub token.
 - **In-app launcher updates** — the relay resolves the launcher's own GitHub releases; the app downloads the installer through the relay, verifies its digest, replaces itself after quitting, and relaunches. **Release notes** remains available in Settings as a fallback.
 - **Shared contract** — one set of API/IPC types consumed by both sides.
@@ -29,11 +35,14 @@ The launcher **installs prebuilt release artifacts**. It does not run a compiler
 │  ├─ main/             Electron main process
 │  │  ├─ index.ts       window, lifecycle, IPC
 │  │  ├─ relay.ts       relay client with cold-start retries
+│  │  ├─ catalogCache.ts last-good catalog cache for offline starts
 │  │  ├─ installer.ts   install queue, staging, atomic swaps, recovery
-│  │  ├─ download.ts    streamed download + SHA-256 verification
+│  │  ├─ download.ts    resumable download + SHA-256 verification
 │  │  ├─ archive.ts     safe zip/tar.gz extraction
 │  │  ├─ detect.ts      executable detection
 │  │  ├─ launch.ts      detached process launching and tracking
+│  │  ├─ playState.ts   persisted sessions and play history
+│  │  ├─ saves.ts       save-folder detection and backups
 │  │  └─ library.ts     installed-product manifests
 │  ├─ preload/          typed contextBridge API
 │  └─ renderer/         React UI (+ browser demo bridge)
@@ -83,7 +92,7 @@ Then open `http://localhost:5174`.
 
 ## Themes
 
-**Settings → Appearance** switches between twelve complete themes. Each family changes typography, corner geometry, surfaces, borders, and control treatment, not only its palette:
+**Settings → Appearance** switches between twenty-two complete themes across eleven families. The picker groups them by family with a blurb, and an **All / Dark / Light** filter narrows the list. Each family changes typography, corner geometry, surfaces, borders, motion, and control treatment, not only its palette:
 
 - **Graffiti Dark / Light** — the wordmark's cyan, magenta, and orange as the default for new installs.
 - **Modern Dark / Light** — the original graphite-and-lime shell and a daylight counterpart.
@@ -91,6 +100,11 @@ Then open `http://localhost:5174`.
 - **Bubbly Dark / Light** — rounded display type, pill controls, pastel gradients, oversized radii.
 - **Rocker Dark / Light** — condensed italic display type, clipped corners, stage-red accents.
 - **Ghost Dark / Light** — fog, translucent glass panels, hairline rules, serif display type.
+- **Vaporwave Dark / Light** — a chrome horizon grid, neon magenta and cyan, wide-tracked caps, gradient display headings.
+- **Terminal Dark / Light** — phosphor monospace on black, or a green-bar printout on cream: square corners, 1px rules, a blinking prompt caret.
+- **Arcade Dark / Light** — cabinet violet and coin yellow, thick outlines, hard offset shadows that press in when clicked.
+- **Night Shift Dark / Light** — warm charcoal or lamplight on linen, desaturated covers and quieter motion for late sessions.
+- **Mono Dark / Light** — greyscale only, hairline high-contrast borders, no gradients, blur, or hover motion. The accessibility option.
 
 The theme id is stored in `config.json` and cached in local storage so the window paints the right colours immediately on the next launch. It is applied instantly; no restart is needed. Existing installs keep their saved theme; Graffiti is only the starting point for new ones.
 
@@ -244,7 +258,7 @@ GitHub's unauthenticated API limit is 60 requests/hour per IP, which a catalog r
 | `GET /api/catalog?platform=win32` | Resolved catalog for `win32`, `linux`, or `darwin`. |
 | `GET /api/launcher?platform=win32` | Newest stable launcher release, matching installer asset, download URL, and digest. |
 | `GET /api/launcher/download?platform=win32` | Streams the launcher installer through the relay, or redirects to GitHub for public assets. |
-| `GET /api/download/:productId?platform=win32` | Streams a private asset through the relay, or redirects to GitHub for public assets. |
+| `GET /api/download/:productId?platform=win32` | Streams a private asset through the relay, or redirects to GitHub for public assets. Honours `Range` so the launcher can resume. |
 
 The catalog response includes the latest release tag, release notes, asset name/size/digest, a platform-specific download URL, available platforms, and the configured executable hint.
 
@@ -277,6 +291,10 @@ Users can still override the relay in Settings after installation.
 - Settings and logs: Electron's `userData` folder (Windows: `%APPDATA%\MCM98 Launcher`).
 - Launcher log: `<userData>/logs/launcher.log`.
 - Installed products: `<userData>/Library` by default, configurable in Settings. Each product has an `app/` folder and an `install.json` manifest.
+- Play history and live sessions: `<userData>/play-state.json`.
+- Partial downloads: `<userData>/downloads/*.part` (swept after 14 days).
+- Cached catalog: `<userData>/cache/catalog-*.json`.
+- Save backups: `<userData>/backups/<product>-saves-<timestamp>.tar.gz`.
 
 Changing the install folder does not move existing installs.
 
@@ -285,12 +303,13 @@ Changing the install folder does not move existing installs.
 1. The launcher asks the relay for the catalog for the current platform.
 2. The relay resolves `releases/latest` (or the newest prerelease), selects a build, and returns the asset metadata.
 3. The launcher downloads the asset to a temporary folder inside the library. Public assets come directly from GitHub; private assets are streamed by the relay.
-4. The SHA-256 digest is verified when GitHub supplied one.
-5. Archives are extracted into a staging folder with path-traversal protection; a single-file executable is moved into the staging folder as-is.
-6. The launcher detects or uses the configured executable.
-7. The previous `app/` folder is moved aside, the staging folder becomes the new `app/`, the manifest is written, and the previous version is removed. If anything fails, the previous version is restored.
-8. The app is launched detached, so closing the launcher does not close the game.
-9. An update is available when the installed version is older than the newest release tag. Updates are blocked while that product is running.
+4. The transfer keeps a partial file in `<userData>/downloads`, so a cancelled or dropped download resumes with an HTTP range request on the next attempt. Anything that ignores `Range` simply restarts from zero.
+5. The SHA-256 digest is verified when GitHub supplied one.
+6. Archives are extracted into a staging folder with path-traversal protection; a single-file executable is moved into the staging folder as-is.
+7. The launcher detects or uses the configured executable.
+8. The previous `app/` folder is moved aside, the staging folder becomes the new `app/`, the manifest is written, and the previous version is removed. If anything fails, the previous version is restored.
+9. The app is launched detached, so closing the launcher does not close the game.
+10. An update is available when the installed version is older than the newest release, comparing a version derived from the tag, then the asset name, then the release title. Skipping a version hides its prompt until a newer release appears. Updates are blocked while that product is running, including sessions that outlived the launcher.
 
 On startup the launcher repairs interrupted updates, restores a previous `app/` folder when possible, and clears abandoned staging/download folders.
 
@@ -308,15 +327,15 @@ On startup the launcher repairs interrupted updates, restores a previous `app/` 
 - No accounts, profiles, SSO, game keys, or per-user entitlements yet.
 - Windows/Linux launcher updates install in place after the app exits. macOS opens the downloaded DMG/zip in Finder instead of replacing the `.app` bundle automatically.
 - Launcher updates are unsigned, like product builds. Windows SmartScreen may still warn on the helper-run installer.
-- No resumable downloads, delta updates, or parallel chunking.
+- No delta updates, parallel chunking, or bandwidth limits. Downloads resume, but only from a single connection.
 - No 7z, DMG, or MSI installation. Supported formats are archives, portable Windows `.exe`, and Linux `.AppImage`.
 - No code signing on Windows or notarization on macOS. Users may see SmartScreen/Gatekeeper warnings; production distribution needs signing.
-- No custom application icon is wired into electron-builder yet (the renderer uses the MCM98 mark).
+- Save-folder detection is heuristic: it looks inside the install first, then for a folder named after the product in the platform's user-data locations. Products that store saves somewhere unusual need **Open folder** to inspect manually, and there is no restore-from-backup action yet.
 - The relay cache is in memory and resets on redeploy.
 - No per-release arch metadata; use explicit asset globs.
 - Rollback is crash-recovery only, not a user-facing version picker.
 
-Natural next steps: SSO profiles and entitlements, automatic launcher installer replacement, save/data management, per-product news and patch notes, and relay-side access control.
+Natural next steps: SSO profiles and entitlements, automatic launcher installer replacement, restoring a save backup, per-product news and patch notes, and relay-side access control.
 
 ## Scripts
 
@@ -348,6 +367,9 @@ It opens a hidden window, checks that the preload bridge exists and the React UI
 - **Launcher update prompt does not appear** — confirm the release is newer than `package.json`. The version is read from the tag, then the asset name, then the release title, so a rolling tag such as `newest` works as long as the build asset or title contains a semantic version such as `0.3.0`. The release also needs an asset for the current platform.
 - **Launcher update download or install fails** — the relay must be reachable and able to resolve `LAUNCHER_REPO`; the build must be an NSIS `.exe` or portable `.zip` on Windows, an AppImage or archive on Linux. On macOS the downloaded file is opened in Finder. In-app installation is disabled when running from source (`npm run dev`).
 - **A theme looks wrong after switching** — themes are applied instantly and saved in `config.json`. Switch back to **Graffiti Dark** in Settings → Appearance; the theme is also cached locally for the next start.
+- **An update prompt stopped appearing** — the version was probably skipped. Settings → Updates lists skipped versions with **Update again**, and a newer release always prompts again.
+- **A download restarts from zero** — resuming needs the server to honour `Range`. GitHub's asset hosts and the relay do; a custom proxy that strips the header will not.
+- **"Repair" replaces "Play"** — the recorded executable is missing. Repair reinstalls the same release in place; the library folder and saves are untouched.
 - **"The relay's GITHUB_TOKEN is not usable..."** — the relay rejected the credential before contacting GitHub. Usually `GITHUB_TOKEN` holds a GitHub App private key, an App JWT, or a malformed value. Replace it with a fine-grained personal access token as described in [GitHub token for private repositories](#github-token-for-private-repositories). Rotate any private key that was pasted into the variable.
 - **"GitHub rejected the configured GITHUB_TOKEN"** — the token is expired, revoked, or lacks access to the repository. Generate a fresh fine-grained token with Contents read access and update the Render environment variable.
 - **"Repository not found, or it is private..."** — set `GITHUB_TOKEN` on the relay. For public repositories, also confirm `repo` is `owner/name` and the release is published (not a draft).

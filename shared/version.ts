@@ -27,6 +27,26 @@ export function isVersionLike(value: string | null | undefined): boolean {
   return typeof value === 'string' && parseVersion(value) !== null
 }
 
+/**
+ * A comparable version for a release whose tag is free-form. GitHub tags are
+ * often rolling ("newest", "latest") or omit the version entirely, so the tag
+ * is only used when it actually contains one; otherwise the asset name and
+ * release title are inspected. Falls back to the raw tag so a caller always
+ * has something to display.
+ */
+export function versionFromRelease(release: {
+  tag: string
+  name?: string | null
+  asset?: { name: string } | null
+}): string {
+  return (
+    versionFromText(release.tag) ??
+    versionFromText(release.asset?.name) ??
+    versionFromText(release.name) ??
+    normalizeVersion(release.tag)
+  )
+}
+
 interface ParsedVersion {
   main: number[]
   pre: string | null

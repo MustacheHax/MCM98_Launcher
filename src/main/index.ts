@@ -15,6 +15,7 @@ import { isTextSize } from '@shared/textSize'
 import { isThemeId, themeMode } from '@shared/themes'
 import type {
   AppInfo,
+  BackupResult,
   HealthResponse,
   InstallRequest,
   InstallTask,
@@ -22,8 +23,12 @@ import type {
   LauncherConfig,
   LauncherLayout,
   LauncherUpdateInfo,
-  Platform
+  PlayState,
+  Platform,
+  SaveInfo,
+  WindowBounds
 } from '@shared/types'
+import { loadCatalog } from './catalogCache'
 import {
   ConfigStore,
   isLauncherLayout,
@@ -36,7 +41,9 @@ import { InstallManager } from './installer'
 import { LaunchService } from './launch'
 import { LibraryService } from './library'
 import { Logger } from './logger'
-import { checkBackend, fetchCatalog } from './relay'
+import { PlayStateStore } from './playState'
+import { checkBackend } from './relay'
+import { backupSaves, detectSaveDirectory } from './saves'
 import { LauncherUpdater } from './updater'
 
 app.setName('MCM98 Launcher')
@@ -54,6 +61,7 @@ let library: LibraryService
 let launch: LaunchService
 let installer: InstallManager
 let updater: LauncherUpdater
+let playState: PlayStateStore
 
 function currentPlatform(): Platform {
   if (!SUPPORTED_PLATFORMS.includes(process.platform as Platform)) {
@@ -112,9 +120,47 @@ const WINDOW_SIZES: Record<
   full: { width: 1340, height: 860, minWidth: 1040, minHeight: 680 }
 }
 
+/** Bounds the window can be restored to, ignoring maximized/fullscreen states. */
+function currentBounds(target: BrowserWindow): WindowBounds | null {
+  if (target.isMaximized() || target.isFullScreen() || target.isMinimized()) return null
+  const position = target.getPosition()
+  const size = target.getSize()
+  const x = position[0]
+  const y = position[1]
+  const width = size[0]
+  const height = size[1]
+  if (x === undefined || y === undefined || width === undefined || height === undefined) {
+    return null
+  }
+  if (![x, y, width, height].every((value) => Number.isFinite(value))) return null
+  return { x, y, width, height }
+}
+
+function sameBounds(a: WindowBounds | undefined, b: WindowBounds): boolean {
+  return Boolean(
+    a && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
+  )
+}
+
+/** A saved position is only reused when part of it lands on a connected display. */
+function isOnScreen(bounds: WindowBounds): boolean {
+  return screen.getAllDisplays().some((display) => {
+    const area = display.workArea
+    const overlapWidth =
+      Math.min(bounds.x + bounds.width, area.x + area.width) - Math.max(bounds.x, area.x)
+    const overlapHeight =
+      Math.min(bounds.y + bounds.height, area.y + area.height) - Math.max(bounds.y, area.y)
+    return overlapWidth >= 120 && overlapHeight >= 80
+  })
+}
+
 function appIconPath(): string | undefined {
-  const candidate = join(__dirname, '../../build/icon.png')
-  return existsSync(candidate) ? candidate : undefined
+  // Only `out/**` is packaged, so the repository's high-resolution icon is
+  // absent from an installed build. The renderer's copy always ships and keeps
+  // the taskbar and window icon instead of falling back to the Electron default.
+  return [join(__dirname, '../../build/icon.png'), join(__dirname, '../renderer/app-icon.png')].find(
+    (candidate) => existsSync(candidate)
+  )
 }
 
 /** Keeps the compact and full shells at their intended window sizes. */
@@ -249,6 +295,12 @@ function registerIpc(): void {
       if (typeof input?.confirmUninstall === 'boolean') {
         patch.confirmUninstall = input.confirmUninstall
       }
+      if (input?.skippedUpdates && typeof input.skippedUpdates === 'object') {
+        patch.skippedUpdates = input.skippedUpdates as Record<string, string>
+      }
+      if (input?.windowBounds && typeof input.windowBounds === 'object') {
+        patch.windowBounds = input.windowBounds as Partial<Record<LauncherLayout, WindowBounds>>
+      }
 
       if (
         patch.installRoot !== undefined &&
@@ -305,7 +357,7 @@ function registerIpc(): void {
   })
 
   ipcMain.handle(IPC.fetchCatalog, async () => {
-    return fetchCatalog(config.get(), currentPlatform(), logger)
+    return loadCatalog(config.get(), config.dataRoot, currentPlatform(), logger)
   })
 
   ipcMain.handle(IPC.getLauncherUpdate, (): LauncherUpdateInfo => updater.getInfo())
@@ -345,6 +397,7 @@ function registerIpc(): void {
       throw new Error('Wait for the current install to finish before uninstalling.')
     }
     await library.uninstall(id)
+    await installer.clearPartials(id)
     broadcast(IPC.libraryChanged)
   })
 
@@ -353,6 +406,33 @@ function registerIpc(): void {
   })
 
   ipcMain.handle(IPC.getRunning, (): string[] => launch.getRunning())
+
+  ipcMain.handle(IPC.getPlayState, (): PlayState => launch.getPlayState())
+
+  ipcMain.handle(IPC.getSaveInfo, async (_event, productId: string): Promise<SaveInfo> => {
+    const product = await library.read(String(productId ?? ''))
+    if (!product) throw new Error('That product is not installed.')
+    return detectSaveDirectory(product)
+  })
+
+  ipcMain.handle(IPC.openSaveFolder, async (_event, productId: string): Promise<void> => {
+    const product = await library.read(String(productId ?? ''))
+    if (!product) throw new Error('That product is not installed.')
+    const info = await detectSaveDirectory(product)
+    if (!info.path) {
+      throw new Error(
+        'No save folder was detected for this product. Open the install folder to look for one.'
+      )
+    }
+    const error = await shell.openPath(info.path)
+    if (error) throw new Error(error)
+  })
+
+  ipcMain.handle(IPC.backupSaves, async (_event, productId: string): Promise<BackupResult> => {
+    const product = await library.read(String(productId ?? ''))
+    if (!product) throw new Error('That product is not installed.')
+    return backupSaves(product, config.dataRoot, logger)
+  })
 
   ipcMain.handle(
     IPC.openPath,
@@ -384,11 +464,15 @@ async function createWindow(): Promise<void> {
   const isMac = process.platform === 'darwin'
 
   const darkShell = themeMode(config.get().theme) === 'dark'
-  const size = WINDOW_SIZES[config.get().layout]
+  const layout = config.get().layout
+  const size = WINDOW_SIZES[layout]
+  const savedBounds = config.get().windowBounds[layout]
+  const restored = savedBounds && isOnScreen(savedBounds) ? savedBounds : null
   mainReadyToShow = false
   const window = new BrowserWindow({
-    width: size.width,
-    height: size.height,
+    width: restored?.width ?? size.width,
+    height: restored?.height ?? size.height,
+    ...(restored ? { x: restored.x, y: restored.y } : {}),
     minWidth: size.minWidth,
     minHeight: size.minHeight,
     show: false,
@@ -415,6 +499,38 @@ async function createWindow(): Promise<void> {
     }
   })
   mainWindow = window
+
+  const persistBounds = (): void => {
+    const snapshot = currentBounds(window)
+    if (!snapshot) return
+    const current = config.get()
+    if (sameBounds(current.windowBounds[current.layout], snapshot)) return
+    try {
+      config.update({ windowBounds: { ...current.windowBounds, [current.layout]: snapshot } })
+    } catch (error) {
+      logger.warn('Could not save the window position.', error)
+    }
+  }
+
+  let boundsTimer: NodeJS.Timeout | null = null
+  const schedulePersistBounds = (): void => {
+    if (boundsTimer) clearTimeout(boundsTimer)
+    boundsTimer = setTimeout(() => {
+      boundsTimer = null
+      persistBounds()
+    }, 700)
+    boundsTimer.unref()
+  }
+
+  window.on('resize', schedulePersistBounds)
+  window.on('move', schedulePersistBounds)
+  window.on('close', () => {
+    if (boundsTimer) {
+      clearTimeout(boundsTimer)
+      boundsTimer = null
+    }
+    persistBounds()
+  })
 
   window.on('closed', () => {
     mainWindow = null
@@ -527,7 +643,11 @@ async function bootstrap(): Promise<void> {
 
   config = new ConfigStore(logger)
   library = new LibraryService(config, logger)
-  launch = new LaunchService(library, logger, (ids) => broadcast(IPC.runningChanged, ids))
+  playState = new PlayStateStore(join(config.dataRoot, 'play-state.json'), logger)
+  launch = new LaunchService(library, logger, playState, (ids, state) => {
+    broadcast(IPC.runningChanged, ids)
+    broadcast(IPC.playStateChanged, state)
+  })
   installer = new InstallManager({
     config,
     library,
@@ -538,6 +658,7 @@ async function bootstrap(): Promise<void> {
   })
 
   await installer.recover()
+  launch.resume()
   updater = new LauncherUpdater(config, currentPlatform(), logger, (info) => {
     broadcast(IPC.launcherUpdateChanged, info)
   })

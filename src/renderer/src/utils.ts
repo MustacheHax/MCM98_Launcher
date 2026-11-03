@@ -1,9 +1,10 @@
-import { isVersionLike, versionLabel } from '@shared/version'
+import { isVersionLike, versionFromRelease, versionLabel } from '@shared/version'
 import type {
   InstallPhase,
   InstallTask,
   InstalledProduct,
   Platform,
+  PlayRecord,
   ProductEntry
 } from '@shared/types'
 
@@ -12,6 +13,7 @@ export {
   isUpdateAvailable,
   isVersionLike,
   normalizeVersion,
+  versionFromRelease,
   versionLabel
 } from '@shared/version'
 
@@ -26,6 +28,20 @@ export function launcherReleaseLabel(
 ): string {
   if (latestVersion && isVersionLike(latestVersion)) return versionLabel(latestVersion)
   return releaseName?.trim() || 'new build'
+}
+
+/**
+ * The version line shown for a catalog release. A rolling tag such as "newest"
+ * would render as "vnewest", so the release title is used instead when no real
+ * version can be derived.
+ */
+export function releaseVersionLabel(release: {
+  tag: string
+  name?: string | null
+  asset?: { name: string } | null
+}): string {
+  const version = versionFromRelease(release)
+  return isVersionLike(version) ? versionLabel(version) : release.name?.trim() || release.tag
 }
 
 export function formatBytes(bytes: number): string {
@@ -49,6 +65,42 @@ export function formatDate(iso: string | null | undefined): string {
 
 export function formatSpeed(bytesPerSecond: number): string {
   return `${formatBytes(bytesPerSecond)}/s`
+}
+
+/** Compact playtime: "45m", "3h 10m", "2d 4h". */
+export function formatDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return '0m'
+  const minutes = Math.round(ms / 60_000)
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  if (hours < 24) return rest > 0 ? `${hours}h ${rest}m` : `${hours}h`
+  return `${Math.floor(hours / 24)}d ${hours % 24}h`
+}
+
+/** "just now", "12m ago", "3h ago", then a date. */
+export function relativeTime(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const time = Date.parse(iso)
+  if (!Number.isFinite(time)) return ''
+  const minutes = Math.round((Date.now() - time) / 60_000)
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.round(hours / 24)
+  if (days < 30) return `${days}d ago`
+  return formatDate(iso)
+}
+
+/** One line of play history for a library row, or null when never launched. */
+export function playSummary(record: PlayRecord | undefined): string | null {
+  if (!record) return null
+  const parts: string[] = []
+  if (record.lastPlayedAt) parts.push(`Played ${relativeTime(record.lastPlayedAt)}`)
+  if (record.playtimeMs >= 60_000) parts.push(`${formatDuration(record.playtimeMs)} played`)
+  if (record.launches > 1 && parts.length > 0) parts.push(`${record.launches} launches`)
+  return parts.length > 0 ? parts.join(' · ') : null
 }
 
 export function platformLabel(platform: Platform): string {

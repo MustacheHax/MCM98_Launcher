@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { SaveInfo } from '@shared/types'
 import { errorMessage, getLauncher } from '../api'
 import { useApp } from '../state'
 import {
@@ -6,10 +7,11 @@ import {
   findInstalled,
   formatBytes,
   formatDate,
-  isUpdateAvailable,
   phaseLabel,
   platformLabel,
+  playSummary,
   productTags,
+  releaseVersionLabel,
   taskProgress,
   versionLabel
 } from '../utils'
@@ -24,13 +26,23 @@ export function ProductDrawer(): JSX.Element | null {
     library,
     tasks,
     running,
+    playState,
+    repairingId,
     requestUninstall,
     openFolder,
     navigate,
-    toast
+    toast,
+    updateFor,
+    isUpdateSkipped,
+    skipUpdate,
+    unskipUpdate,
+    repair
   } = useApp()
   const closeRef = useRef<HTMLButtonElement>(null)
   const bridge = getLauncher()
+  const [saves, setSaves] = useState<SaveInfo | null>(null)
+  const [savesBusy, setSavesBusy] = useState(false)
+  const selectedId = selected?.id
 
   useEffect(() => {
     closeRef.current?.focus()
@@ -45,14 +57,32 @@ export function ProductDrawer(): JSX.Element | null {
     }
   }, [closeProduct])
 
+  // Save-folder detection touches the disk, so it runs per opened product.
+  useEffect(() => {
+    let alive = true
+    setSaves(null)
+    if (!selectedId) return
+    void bridge
+      .getSaveInfo(selectedId)
+      .then((info) => {
+        if (alive) setSaves(info)
+      })
+      .catch(() => {
+        if (alive) setSaves({ path: null, source: null, exists: false })
+      })
+    return () => {
+      alive = false
+    }
+  }, [bridge, selectedId])
+
   if (!selected) return null
 
   const installed = findInstalled(library, selected.id)
   const task = activeTaskFor(tasks, selected.id)
   const isRunning = running.includes(selected.id)
-  const updateAvailable = Boolean(
-    installed && selected.release && isUpdateAvailable(installed.version, selected.release.tag)
-  )
+  const updateAvailable = Boolean(updateFor(selected))
+  const updateSkipped = isUpdateSkipped(selected)
+  const repairing = repairingId === selected.id
   const percent = task ? Math.round(taskProgress(task)) : 0
   const indeterminate =
     task?.phase === 'extracting' || task?.phase === 'verifying' || task?.phase === 'finalizing'
@@ -63,6 +93,26 @@ export function ProductDrawer(): JSX.Element | null {
       await bridge.openExternal(url)
     } catch (error) {
       toast(errorMessage(error), 'error')
+    }
+  }
+
+  const openSaves = async (): Promise<void> => {
+    try {
+      await bridge.openSaveFolder(selected.id)
+    } catch (error) {
+      toast(errorMessage(error), 'error')
+    }
+  }
+
+  const makeSaveBackup = async (): Promise<void> => {
+    setSavesBusy(true)
+    try {
+      const result = await bridge.backupSaves(selected.id)
+      toast(`Save backup written (${formatBytes(result.bytes)}).`, 'success')
+    } catch (error) {
+      toast(errorMessage(error), 'error')
+    } finally {
+      setSavesBusy(false)
     }
   }
 
@@ -111,7 +161,7 @@ export function ProductDrawer(): JSX.Element | null {
             </span>
             {selected.release && (
               <span className="drawer-status-version mono">
-                {versionLabel(selected.release.tag)}
+                {releaseVersionLabel(selected.release)}
               </span>
             )}
             {task && (
@@ -136,7 +186,7 @@ export function ProductDrawer(): JSX.Element | null {
             <div>
               <span>Latest</span>
               <strong className="mono">
-                {selected.release ? versionLabel(selected.release.tag) : '—'}
+                {selected.release ? releaseVersionLabel(selected.release) : '—'}
               </strong>
             </div>
             <div>
@@ -188,6 +238,17 @@ export function ProductDrawer(): JSX.Element | null {
             <ProductActions product={selected} size="md" />
             {installed && (
               <>
+                {!installed.executablePath && (
+                  <button
+                    className="btn btn-outline"
+                    onClick={() => void repair(selected)}
+                    disabled={Boolean(task) || repairing}
+                    title="Reinstall this build to restore a missing executable"
+                  >
+                    <Icon name="refresh" size={15} />
+                    {repairing ? 'Repairing…' : 'Repair install'}
+                  </button>
+                )}
                 <button
                   className="btn btn-ghost"
                   onClick={() => void openFolder(installed.id)}
@@ -219,7 +280,7 @@ export function ProductDrawer(): JSX.Element | null {
                 <span>
                   Installed {versionLabel(installed.version)}
                   {updateAvailable && selected.release && (
-                    <> · {versionLabel(selected.release.tag)} available</>
+                    <> · {releaseVersionLabel(selected.release)} available</>
                   )}
                 </span>
               </div>
@@ -227,6 +288,51 @@ export function ProductDrawer(): JSX.Element | null {
                 {formatBytes(installed.sizeBytes)} on disk · installed{' '}
                 {formatDate(installed.installedAt)}
               </div>
+              {playSummary(playState[installed.id]) && (
+                <div className="installed-meta">
+                  <Icon name="clock" size={12} /> {playSummary(playState[installed.id])}
+                </div>
+              )}
+
+              {(updateAvailable || updateSkipped) && selected.release && (
+                <div className="drawer-update-row">
+                  {updateAvailable && (
+                    <button className="text-button" onClick={() => void skipUpdate(selected)}>
+                      Skip {releaseVersionLabel(selected.release)}
+                    </button>
+                  )}
+                  {updateSkipped && (
+                    <button
+                      className="text-button"
+                      onClick={() => void unskipUpdate(selected.id)}
+                    >
+                      Skipped {releaseVersionLabel(selected.release)} · Update anyway
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <div className="save-row">
+                <button
+                  className="text-button"
+                  onClick={() => void openSaves()}
+                  disabled={savesBusy}
+                  title={saves?.path ?? 'Look for this product\'s save folder'}
+                >
+                  <Icon name="folder" size={13} />
+                  {saves?.path ? 'Open saves' : 'Find saves'}
+                </button>
+                <button
+                  className="text-button"
+                  onClick={() => void makeSaveBackup()}
+                  disabled={savesBusy || !saves?.path}
+                  title="Archive the save folder into the launcher data folder"
+                >
+                  <Icon name="download" size={13} />
+                  {savesBusy ? 'Backing up…' : 'Back up saves'}
+                </button>
+              </div>
+
               <code className="path" title={installed.installPath}>
                 {installed.installPath}
               </code>
@@ -239,7 +345,7 @@ export function ProductDrawer(): JSX.Element | null {
                 <h3>Release notes</h3>
                 <p>
                   {selected.release
-                    ? `${versionLabel(selected.release.tag)} · ${formatDate(selected.release.publishedAt)}`
+                    ? `${releaseVersionLabel(selected.release)} · ${formatDate(selected.release.publishedAt)}`
                     : 'Nothing published yet'}
                 </p>
               </div>
