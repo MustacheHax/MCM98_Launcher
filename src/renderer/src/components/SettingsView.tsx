@@ -542,8 +542,9 @@ export function SettingsView(): JSX.Element {
                   <div>
                     <h2>Theme family</h2>
                     <p>
-                      Twelve complete themes, not just palettes. Typography, corners, borders, and
-                      textures change with each family. Your choice is saved to this machine.
+                      Twenty-two complete themes across eleven families, not just palettes.
+                      Typography, corners, borders, and textures change with each family. Your choice
+                      is saved to this machine.
                     </p>
                   </div>
                 </div>
@@ -652,7 +653,7 @@ export function SettingsView(): JSX.Element {
                   <div className="launcher-update-head">
                     <span className={`status-dot ${updateTone}`} />
                     <span>Launcher update</span>
-                    <span className="mono">v{appInfo?.version ?? '0.4.6'}</span>
+                    <span className="mono">v{appInfo?.version ?? '0.4.7'}</span>
                   </div>
                   <p>{updateMessage}</p>
                   {updateAvailable && updateBusy && (
@@ -774,7 +775,7 @@ export function SettingsView(): JSX.Element {
                 <dl className="about-grid">
                   <div>
                     <dt>Version</dt>
-                    <dd className="mono">v{appInfo?.version ?? '0.4.6'}</dd>
+                    <dd className="mono">v{appInfo?.version ?? '0.4.7'}</dd>
                   </div>
                   <div>
                     <dt>Platform</dt>

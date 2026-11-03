@@ -30,7 +30,7 @@ export function TitleBar(): JSX.Element {
           <Icon name="search" size={12} />
           <kbd>ctrl k</kbd>
         </button>
-        <span className="titlebar-version">v{appInfo?.version ?? '0.4.6'}</span>
+        <span className="titlebar-version">v{appInfo?.version ?? '0.4.7'}</span>
       </div>
     </header>
   )

@@ -4046,7 +4046,22 @@ html[data-motion="reduced"] .progress.indeterminate > span {
 .theme-picker {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 12px;
+}
+
+.theme-picker-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.theme-picker-count {
+  margin: 0;
+  color: var(--dim);
+  font-size: calc(10.5px * var(--text-scale));
+  letter-spacing: 0.04em;
 }
 
 .theme-mode-filter {
@@ -4074,32 +4089,6 @@ html[data-motion="reduced"] .progress.indeterminate > span {
 .theme-mode-option.is-active {
   background: var(--accent);
   color: var(--accent-ink);
-}
-
-.theme-family {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-
-.theme-family-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 10px;
-}
-
-.theme-family-head h3 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: calc(13px * var(--text-scale));
-  letter-spacing: 0.02em;
-}
-
-.theme-family-head p {
-  margin: 0;
-  color: var(--dim);
-  font-size: calc(10.5px * var(--text-scale));
 }
 
 /* ------------------------------------------------------------------ */

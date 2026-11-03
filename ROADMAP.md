@@ -2,7 +2,7 @@
 
 Planned releases for the MCM98 Launcher and its relay, and the version each kind of change ships under. Shipped work is recorded in [CHANGELOG.md](CHANGELOG.md); this file is intent, not a promise, and it is re-ordered as priorities change.
 
-Current release: **0.4.6**.
+Current release: **0.4.7**.
 
 ## How versions are chosen
 
@@ -34,9 +34,9 @@ Patch. No data or contract changes, so a 0.4.0 install upgrades in place.
 - **Automatic relay.** The launcher dials the relay baked in at build time and replaces any stored address, so the **Connection** settings tab is gone. The address and a **Test relay** button live in **Settings → About**.
 - **What's New card** rewritten to summarise every change since 0.3.
 
-Deferred from this list: a repeatable `npm test` suite, shipped in 0.4.6.
+Deferred from this list: a repeatable `npm test` suite, shipped in 0.4.7.
 
-## 0.4.6 — shipped 2026-11-03
+## 0.4.7 — shipped 2026-11-03
 
 - **Update-check caching fix.** The relay no longer reuses a 5-minute GitHub snapshot for the launcher's own release, and neither `/api/launcher` nor a client may cache the answer; the client also bypasses caches on every check. The relay half fixes existing installs on redeploy; this build carries the client half.
 - **Repeatable tests.** `npm test` now runs twelve checks over the downloader, the play-state store, and save detection. The relay range check stays manual because it needs a live GitHub asset.

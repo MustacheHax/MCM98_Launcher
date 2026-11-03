@@ -107,7 +107,7 @@ Then open `http://localhost:5174`.
 - **Ghost Dark / Light** — fog, translucent glass panels, hairline rules, serif display type.
 - **Vaporwave Dark / Light** — a chrome horizon grid, neon magenta and cyan, wide-tracked caps, gradient display headings.
 - **Terminal Dark / Light** — phosphor monospace on black, or a green-bar printout on cream: square corners, 1px rules, a blinking prompt caret.
-- **Arcade Dark / Light** — cabinet violet and coin yellow, thick outlines, hard offset shadows that press in when clicked.
+- **Arcade Dark / Light** — cabinet violet and coin yellow, thick outlines, hard offset shadows that press in when clicked, and a bundled pixel marquee face (`Press Start 2P`, SIL OFL) for headings. The light variant is warm coin-op paper, not another lavender.
 - **Night Shift Dark / Light** — warm charcoal or lamplight on linen, desaturated covers and quieter motion for late sessions.
 - **Mono Dark / Light** — greyscale only, hairline high-contrast borders, no gradients, blur, or hover motion. The accessibility option.
 
@@ -200,15 +200,15 @@ The launcher checks its own repository for stable GitHub Releases. By default th
 
 The app compares the release version with its own and only prompts when the release is newer. Semantic versions are read from the tag first, then from the asset name and release title, so a rolling tag such as `newest` still resolves to a comparable version. **Update now** downloads the build through the relay, verifies GitHub's digest when present, and hands off to a small detached helper. The helper waits for the launcher to exit, runs the NSIS installer (or copies a portable zip / AppImage / archive into place), and relaunches the launcher. On macOS, the downloaded DMG or zip is opened in Finder and the user finishes the drag-install. The published release must not be a prerelease or draft.
 
-The current app version is `0.4.6`. If the newest release has no comparable version at all, Settings explains that instead of offering a bogus update.
+The current app version is `0.4.7`. If the newest release has no comparable version at all, Settings explains that instead of offering a bogus update.
 
-Self-installation arrived in 0.2.0. Install 0.2.0 or newer manually once (run `release/MCM98 Launcher-0.4.6-win-x64.exe` after attaching it to the release); every later version can then update from inside the running launcher. A 0.1.0 build can only detect the release and open GitHub.
+Self-installation arrived in 0.2.0. Install 0.2.0 or newer manually once (run `release/MCM98 Launcher-0.4.7-win-x64.exe` after attaching it to the release); every later version can then update from inside the running launcher. A 0.1.0 build can only detect the release and open GitHub.
 
 ### Versioning and roadmap
 
 The launcher and the relay are versioned together from the same commit, so both `package.json` files carry the same number and the version shown in the titlebar, status bar, and Settings comes from `app.getVersion()`.
 
-- **Patch (`0.4.6`)** — fixes that do not change behaviour or data formats: resolver edge cases, UI regressions, copy and documentation corrections.
+- **Patch (`0.4.7`)** — fixes that do not change behaviour or data formats: resolver edge cases, UI regressions, copy and documentation corrections.
 - **Minor (`0.5.0`)** — new features or new persisted data. Every minor gets a `CHANGELOG.md` section, and the published release body is what Settings shows as release notes.
 - **Major (`1.0.0`)** — reserved for the point where installs, the catalog contract, and the relay API are considered stable. Before that, compatibility is best-effort: manifest and config changes are migrated in place rather than versioned.
 

@@ -8,13 +8,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 Planned work and the version each item ships under live in [ROADMAP.md](ROADMAP.md).
 
-## [0.4.6] — 2026-11-03
+## [0.4.7] — 2026-11-03
 
 ### Added
 
 - **A real test suite** — `npm test` runs twelve checks over the parts that broke before or would break silently: the downloader against a local range-capable server (resume from a partial, a server that ignores `Range`, a `416` retry, and a bad digest discarding its partial), the play-state store (a live session surviving a restart, a dead PID being reaped with its playtime folded in, normal exits adding playtime, and the persisted JSON round-tripping), and save detection (publisher nesting, direct folders beating nested ones, install folders beating fuzzy matches, and a clean miss).
 - The downloader and save detection no longer import Electron directly, so they run in plain Node: `downloadFile` takes its transport as `fetchImpl` (the app passes `net.fetch`) and `detectSaveDirectory` takes the platform folders from the new `saveRoots.ts`.
 - Test files are typechecked with the rest of the main process (`test/**/*.mts` in `tsconfig.node.json`).
+
+### Changed
+
+- **The theme picker is a grid again.** The appearance tab had grown a section per family, each holding two cards, which read as eleven stacked rows in a six-column panel. All themes render in one grid now, in family order, with the family and brightness printed under each name; the All / Dark / Light filter and a live count stay on top.
+- **Arcade has its own typeface.** `Press Start 2P` is bundled as a 6.6 KB woff2 with its SIL OFL licence beside it, so the family's headings are pixel marquees offline instead of Arial Black. Cabinet headings run smaller so the wide face fits.
+- **The newer families are pulled apart where they overlapped.** Arcade Light moved from lavender to warm coin-op paper, so it no longer twins Vaporwave Light; Night Shift Light sits on deeper parchment to separate it from Terminal Light's green-bar cream and 90s Retro Light's grey beige. Every family now differs in palette, geometry, and type, not just hue.
+- **Settings copy corrected:** the appearance panel said twelve themes when there are twenty-two across eleven families.
 
 ### Fixed
 
@@ -97,8 +104,8 @@ The largest release so far: the launcher gained persistence, resume, and library
 
 Releases before 0.3.0 predate this changelog. In short: 0.2.0 brought self-installation and the relay-backed catalog, and 0.1.0 was the first release with catalog listing, install, launch, and uninstall.
 
-[Unreleased]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.6...HEAD
-[0.4.6]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.5...v0.4.6
+[Unreleased]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.7...HEAD
+[0.4.7]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.5...v0.4.7
 [0.4.5]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.0...v0.4.5
 [0.4.0]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.3.4...v0.4.0
 [0.3.4]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.3.0...v0.3.4

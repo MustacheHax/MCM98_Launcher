@@ -70,7 +70,7 @@ export const THEME_FAMILIES: ThemeFamilyDefinition[] = [
   { id: 'ghost', label: 'Ghost', blurb: 'Fog, translucent glass, and hairline serif type.' },
   { id: 'vapor', label: 'Vaporwave', blurb: 'Chrome horizons, neon magenta, wide tracking.' },
   { id: 'terminal', label: 'Terminal', blurb: 'Phosphor monospace, or a green-bar printout.' },
-  { id: 'arcade', label: 'Arcade', blurb: 'Bold outlines, offset shadows, cabinet colours.' },
+  { id: 'arcade', label: 'Arcade', blurb: 'Bold outlines, a pixel marquee face, cabinet colours.' },
   { id: 'night', label: 'Night Shift', blurb: 'Warm, dim, low-glare surfaces for late sessions.' },
   { id: 'mono', label: 'Mono', blurb: 'Greyscale, hairline borders, maximum contrast.' }
 ]
@@ -225,7 +225,7 @@ export const THEMES: ThemeDefinition[] = [
     name: 'Arcade Dark',
     family: 'arcade',
     mode: 'dark',
-    blurb: 'Cabinet violet with thick outlines, offset shadows, and a coin-op yellow.',
+    blurb: 'Cabinet violet with thick outlines, offset shadows, a pixel marquee face, and coin-op yellow.',
     swatches: ['#0b0819', '#221946', '#ffd23f'],
     previewText: '#fdf6ff'
   },
@@ -234,8 +234,8 @@ export const THEMES: ThemeDefinition[] = [
     name: 'Arcade Light',
     family: 'arcade',
     mode: 'light',
-    blurb: 'Sticker-sheet bright: indigo ink, chunky buttons, and hard drop shadows.',
-    swatches: ['#f2f0ff', '#ffffff', '#6a3df0'],
+    blurb: 'Coin-op on warm paper: indigo ink, chunky buttons, and hard drop shadows.',
+    swatches: ['#fff7e3', '#ffffff', '#4b22d6'],
     previewText: '#17102e'
   },
   {
@@ -252,8 +252,8 @@ export const THEMES: ThemeDefinition[] = [
     name: 'Night Shift Light',
     family: 'night',
     mode: 'light',
-    blurb: 'Lamplight on linen: soft cream panels, brown ink, low glare.',
-    swatches: ['#f6f1e8', '#fffdf8', '#a2611f'],
+    blurb: 'Lamplight on deep parchment: amber panels, brown ink, low glare.',
+    swatches: ['#f4ead7', '#fffdf6', '#a2611f'],
     previewText: '#241a12'
   },
   {

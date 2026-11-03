@@ -4,7 +4,7 @@
  * when the card should reappear for people who dismissed the previous one.
  */
 export const WHATS_NEW = {
-  version: '0.4.6',
+  version: '0.4.7',
   eyebrow: "What's new",
   title: 'Everything since 0.3',
   items: [
