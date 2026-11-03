@@ -299,7 +299,7 @@ export class LauncherUpdater {
           ...releaseFields(release),
           checkedAt: new Date().toISOString(),
           error:
-            'The newest launcher release does not include a version number. Publish a release titled or packaged with a version such as 0.3.0.'
+            'The newest launcher release does not include a version number. Publish a release titled or packaged with a version such as 0.4.0.'
         })
       }
 
