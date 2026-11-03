@@ -20,8 +20,7 @@ export function CatalogView(): JSX.Element {
     library,
     tasks,
     running,
-    openProduct,
-    navigate
+    openProduct
   } = useApp()
 
   const products = catalog?.products ?? []
@@ -99,16 +98,14 @@ export function CatalogView(): JSX.Element {
           <h2>The relay is not answering</h2>
           <p>{catalogError}</p>
           <p className="hint">
-            Render's free tier can take up to a minute to wake a sleeping service. Retry, or check
-            the relay address in Settings.
+            Render's free tier can take up to a minute to wake a sleeping service. The launcher
+            dials its built-in relay automatically, so waiting a moment and retrying is usually
+            enough.
           </p>
           <div className="error-actions">
             <button className="btn btn-primary" onClick={() => void refreshCatalog()}>
               <Icon name="refresh" size={15} />
               Try again
-            </button>
-            <button className="btn" onClick={() => navigate('settings')}>
-              Relay settings
             </button>
           </div>
         </div>

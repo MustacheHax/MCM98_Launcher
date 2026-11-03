@@ -15,7 +15,7 @@ export function versionLabel(version: string): string {
 /**
  * Extracts the first semantic version embedded in arbitrary text, such as a
  * release name ("Launcher98 V0.3") or an asset name
- * ("MCM98.Launcher-0.4.0-win-x64.exe"). Returns null when none is present.
+ * ("MCM98.Launcher-0.4.5-win-x64.exe"). Returns null when none is present.
  */
 export function versionFromText(value: string | null | undefined): string | null {
   if (!value) return null

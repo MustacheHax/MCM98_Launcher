@@ -48,6 +48,8 @@ const api: LauncherApi = {
   cancelInstall: (taskId) => ipcRenderer.invoke(IPC.cancelInstall, taskId) as Promise<void>,
   getTasks: () => ipcRenderer.invoke(IPC.getTasks) as Promise<InstallTask[]>,
   clearFinishedTasks: () => ipcRenderer.invoke(IPC.clearFinishedTasks) as Promise<void>,
+  discardPartials: (productId) =>
+    ipcRenderer.invoke(IPC.discardPartials, productId) as Promise<void>,
   uninstall: (productId) => ipcRenderer.invoke(IPC.uninstall, productId) as Promise<void>,
 
   launch: (productId) =>

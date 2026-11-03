@@ -26,17 +26,6 @@ const BUILD_BACKEND = (import.meta.env.MAIN_VITE_BACKEND_URL ?? '').trim()
 
 const DEFAULT_BACKEND = BUILD_BACKEND || (app.isPackaged ? HOSTED_BACKEND : LOCAL_BACKEND)
 
-/**
- * Addresses written by builds that shipped without a production relay. On a
- * user's machine nothing answers on those ports, so packaged installs are
- * moved to the real default once. A URL typed in Settings is never rewritten.
- */
-const LEGACY_DEFAULT_BACKENDS = new Set([
-  'http://localhost:8790',
-  'http://localhost',
-  'http://127.0.0.1:8790'
-])
-
 const LAYOUTS: LauncherLayout[] = ['compact', 'full']
 const START_VIEWS: LaunchView[] = ['library', 'catalog', 'downloads']
 const SETTING_ID = /^[a-z0-9][a-z0-9-]{0,63}$/
@@ -134,25 +123,25 @@ export class ConfigStore {
       windowBounds: {}
     }
     this.current = this.load(defaults)
-    this.migrateLegacyBackend(defaults.backendUrl)
+    this.enforceBackend(defaults.backendUrl)
   }
 
   /**
-   * Earlier builds stored the development relay. A packaged launcher should
-   * talk to the hosted relay instead, so upgrade that one value and persist it.
+   * The relay is chosen by the build (`MAIN_VITE_BACKEND_URL`, otherwise the
+   * hosted service, otherwise the local one in development) rather than by the
+   * user, so a stored address from an older build is replaced and persisted.
+   * That keeps upgrades working after the hosted relay moves.
    */
-  private migrateLegacyBackend(fallback: string): void {
+  private enforceBackend(fallback: string): void {
     const previous = this.current.backendUrl
-    if (!app.isPackaged || previous === fallback || !LEGACY_DEFAULT_BACKENDS.has(previous)) {
-      return
-    }
+    if (previous === fallback) return
 
     this.current = { ...this.current, backendUrl: fallback }
+    this.log.info(`Relay address set to ${fallback} (stored value was ${previous}).`)
     try {
       this.persist(this.current)
-      this.log.info(`Relay URL upgraded from ${previous} to ${fallback}.`)
     } catch (error) {
-      this.log.warn('Could not save the upgraded relay URL; using it for this session only.', error)
+      this.log.warn('Could not save the relay address; using it for this session only.', error)
     }
   }
 

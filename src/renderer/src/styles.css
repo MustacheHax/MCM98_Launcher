@@ -426,20 +426,6 @@ button:disabled {
   color: var(--text-soft);
 }
 
-.relay-status-chevron {
-  opacity: 0;
-  transform: translateX(-2px);
-  transition:
-    opacity 0.14s ease,
-    transform 0.14s ease;
-}
-
-.relay-status:hover .relay-status-chevron,
-.relay-status-wrap:focus-within .relay-status-chevron {
-  opacity: 0.7;
-  transform: none;
-}
-
 .relay-popover {
   position: absolute;
   bottom: calc(100% + 9px);

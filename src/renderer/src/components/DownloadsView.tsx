@@ -33,7 +33,7 @@ export function DownloadsView(): JSX.Element {
       <PageHeader
         eyebrow="Transfer queue"
         title="Downloads"
-        description="Release assets are downloaded, checked against GitHub's checksum, then installed into your library."
+        description="Release assets are downloaded, checked against GitHub's checksum, then installed into your library. A stopped transfer keeps a partial file so the next attempt resumes."
         actions={
           <button
             className="btn btn-ghost"
@@ -108,7 +108,7 @@ function TaskCard({
   onCancel?: () => void
   onOpenLibrary?: () => void
 }): JSX.Element {
-  const { openFolder } = useApp()
+  const { openFolder, discardPartials } = useApp()
   const active = !isTerminalPhase(task.phase)
   const indeterminate =
     task.phase === 'extracting' || task.phase === 'finalizing' || task.phase === 'verifying'
@@ -130,8 +130,8 @@ function TaskCard({
       }`
     }
     if (task.phase === 'done') return `${formatBytes(task.totalBytes)} installed`
-    if (task.phase === 'error') return 'Install did not finish'
-    if (task.phase === 'cancelled') return 'Transfer stopped'
+    if (task.phase === 'error') return 'Install did not finish · partial kept for resume'
+    if (task.phase === 'cancelled') return 'Transfer stopped · partial kept for resume'
     return task.message ?? phaseLabel(task.phase)
   })()
 
@@ -160,6 +160,16 @@ function TaskCard({
         {active && onCancel && (
           <button className="btn btn-ghost btn-sm" onClick={onCancel}>
             Cancel
+          </button>
+        )}
+        {!active && (task.phase === 'error' || task.phase === 'cancelled') && (
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => void discardPartials(task.productId)}
+            title="Delete the partial file kept for resuming"
+          >
+            <Icon name="trash" size={13} />
+            Discard partial
           </button>
         )}
         {task.phase === 'done' && onOpenLibrary && (

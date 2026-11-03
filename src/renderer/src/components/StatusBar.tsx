@@ -13,20 +13,13 @@ function hostFromUrl(value: string | undefined): string {
 
 /**
  * The thin footer carries the relay health instead of a sidebar card. The
- * indicator is also the shortcut to the connection settings, and hovering it
- * (or focusing it with the keyboard) reveals the host and any last error.
+ * launcher picks its relay automatically, so the indicator only reports state;
+ * hovering it (or focusing it with the keyboard) reveals the host and any last
+ * error.
  */
 export function StatusBar(): JSX.Element {
-  const {
-    config,
-    appInfo,
-    catalog,
-    catalogError,
-    catalogLoading,
-    demoMode,
-    navigate,
-    tasks
-  } = useApp()
+  const { config, appInfo, catalog, catalogError, catalogLoading, demoMode, navigate, tasks } =
+    useApp()
 
   const stale = Boolean(catalog?.stale)
   const relayState = stale || catalogError
@@ -55,17 +48,15 @@ export function StatusBar(): JSX.Element {
     <footer className="statusbar">
       <div className="statusbar-left">
         <div className={`relay-status-wrap is-${relayState}`}>
-          <button
-            type="button"
+          <div
             className="relay-status"
-            onClick={() => navigate('settings')}
+            tabIndex={0}
             aria-describedby="relay-status-detail"
-            title="Relay status and settings"
+            title="Relay status"
           >
             <span className={`status-dot ${relayState}`} aria-hidden="true" />
             <span className="relay-status-label">{relayLabel}</span>
-            <Icon name="chevronRight" size={11} className="relay-status-chevron" />
-          </button>
+          </div>
 
           <div className="relay-popover" id="relay-status-detail" role="tooltip">
             <div className="relay-popover-head">
@@ -107,7 +98,7 @@ export function StatusBar(): JSX.Element {
             <p className="relay-popover-hint">
               {demoMode
                 ? 'Sample products and simulated installs. Run the desktop app for a real relay.'
-                : 'Click to open Settings; the relay address and connection test live under Connection.'}
+                : 'The launcher dials its built-in relay automatically. Settings → About shows the address and can re-test it.'}
             </p>
           </div>
         </div>
@@ -127,7 +118,7 @@ export function StatusBar(): JSX.Element {
 
       <div className="statusbar-right">
         <span className="statusbar-brand">MCM98 Launcher</span>
-        <span className="statusbar-version mono">v{appInfo?.version ?? '0.4.0'}</span>
+        <span className="statusbar-version mono">v{appInfo?.version ?? '0.4.5'}</span>
       </div>
     </footer>
   )

@@ -390,6 +390,14 @@ function registerIpc(): void {
     installer.clearFinished()
   })
 
+  ipcMain.handle(IPC.discardPartials, async (_event, productId: string): Promise<void> => {
+    const id = String(productId ?? '')
+    if (installer.hasActiveProduct(id)) {
+      throw new Error('Stop the download before discarding its partial file.')
+    }
+    await installer.clearPartials(id)
+  })
+
   ipcMain.handle(IPC.uninstall, async (_event, productId: string): Promise<void> => {
     const id = String(productId ?? '')
     await launch.ensureStopped(id)

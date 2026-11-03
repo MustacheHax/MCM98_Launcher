@@ -15,6 +15,7 @@ export const IPC = {
   cancelInstall: 'install:cancel',
   getTasks: 'install:list',
   clearFinishedTasks: 'install:clear-finished',
+  discardPartials: 'install:discard-partials',
   uninstall: 'library:uninstall',
 
   launch: 'launch:start',

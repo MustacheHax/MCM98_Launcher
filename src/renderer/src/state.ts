@@ -64,6 +64,8 @@ export interface AppContextValue {
   saveSettings: (patch: Partial<LauncherConfig>) => Promise<void>
   cancelTask: (taskId: string) => Promise<void>
   clearFinished: () => Promise<void>
+  /** Removes a partial download kept for resuming this product. */
+  discardPartials: (productId: string) => Promise<void>
   toast: (message: string, kind?: ToastKind) => void
 }
 

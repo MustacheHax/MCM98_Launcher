@@ -15,8 +15,9 @@ GitHub Releases ──► Render relay ──► Electron launcher ──► loc
 - **Desktop launcher** — Electron + React + TypeScript, twenty-two complete appearance themes across eleven families, generated cover art, install/update/play/uninstall flows, download queue, settings, logs.
 - **Library tools** — search, sort by name / recently played / size, an updates-only filter, **Update all**, per-product **Skip this version**, and **Repair install** when the recorded executable is missing.
 - **Play history** — last played, total playtime, and launch counts per product. Running sessions survive a launcher restart, so updates and uninstalls stay blocked while a game is open even after relaunching the launcher.
-- **Saves** — each install exposes its detected save folder and can archive it to `backups/` as a `.tar.gz` in one click.
-- **Resumable downloads** — an interrupted transfer continues from its partial file using HTTP range requests, including assets streamed through the relay.
+- **Saves** — each install exposes its detected save folder and can archive it to `backups/` as a `.tar.gz` in one click. Detection ranks an exact product-named folder in a user-data location above a save folder inside the install, and also looks one level deeper for publisher/studio nesting such as `%LOCALAPPDATA%\<Studio>\<Game>` and Unity's `LocalLow`.
+- **Resumable downloads** — an interrupted transfer continues from its partial file using HTTP range requests, including assets streamed through the relay. Cancelled transfers keep the partial for the next attempt, and **Discard partial** frees it.
+- **Automatic relay** — the launcher dials the relay baked in at build time (hosted by default, local in development) and replaces a stored address from an older build, so there is no connection setup to get wrong. The address is reported read-only in **Settings → About**.
 - **Offline catalog cache** — when the relay is asleep, the library still shows the last resolved catalog and flags it as cached.
 - **Command palette** — `Ctrl/Cmd + K` jumps to any view, product, or maintenance action; `Ctrl/Cmd + 1-4` switches views.
 - **Relay** — Express + TypeScript API suitable for Render. It reads a developer-owned catalog, resolves GitHub releases server-side, caches responses, and streams private release assets without exposing a GitHub token.
@@ -51,6 +52,8 @@ The launcher **installs prebuilt release artifacts**. It does not run a compiler
 │  ├─ catalog.json      selected repositories (edit this)
 │  └─ catalog.example.json
 ├─ shared/              API and desktop type contracts
+├─ CHANGELOG.md         what shipped in each released version
+├─ ROADMAP.md           planned releases and the version each change ships under
 ├─ render.yaml          Render Blueprint
 └─ electron-builder.yml packaging targets
 ```
@@ -80,7 +83,7 @@ npm --prefix server run dev
 npm run dev
 ```
 
-Packaged builds default to the hosted relay at `https://mcm98-launcher.onrender.com`. Running from source with `npm run dev` defaults to the local relay at `http://localhost:8790`; if another service uses that port, start the relay with `PORT=8791` and point **Settings** at it (or set `MAIN_VITE_BACKEND_URL`). Existing configs that still contain the old localhost default are upgraded to the hosted relay once on launch.
+Packaged builds default to the hosted relay at `https://mcm98-launcher.onrender.com`. Running from source with `npm run dev` defaults to the local relay at `http://localhost:8790`; if another service uses that port, start the relay with `PORT=8791` and build with `MAIN_VITE_BACKEND_URL=http://localhost:8791`. The launcher picks its relay itself — there is no address to type in the app, and a stored address from an older build is replaced at launch.
 
 To preview the UI without Electron (sample data, simulated installs):
 
@@ -184,28 +187,28 @@ Supported asset selection details:
 
 The launcher checks its own repository for stable GitHub Releases. By default this is `MustacheHax/MCM98_Launcher`; change it on the relay with `LAUNCHER_REPO`.
 
-1. Set `version` in both `package.json` and `server/package.json` to the next semantic version, for example `0.4.1`.
+1. Set `version` in both `package.json` and `server/package.json` to the next semantic version, for example `0.5.0`.
 2. Add the release to [CHANGELOG.md](CHANGELOG.md) and move the corresponding items out of [ROADMAP.md](ROADMAP.md).
 3. Build the installer with `npm run dist:win` (and the platform-specific command for macOS/Linux).
-4. Publish a **stable** GitHub Release tagged `v0.4.1` (or `0.4.1`) and attach the launcher artifact:
-   - Windows: `MCM98 Launcher-0.4.1-win-x64.exe` or a Windows `.zip`
+4. Publish a **stable** GitHub Release tagged `v0.5.0` (or `0.5.0`) and attach the launcher artifact:
+   - Windows: `MCM98 Launcher-0.5.0-win-x64.exe` or a Windows `.zip`
    - macOS: a `.dmg` or macOS `.zip`
    - Linux: an `.AppImage`, `.tar.gz`, or `.zip`
 5. Redeploy the relay if `LAUNCHER_REPO` changed. The launcher checks on startup, every six hours, and when **Check now** is clicked in Settings.
 
 The app compares the release version with its own and only prompts when the release is newer. Semantic versions are read from the tag first, then from the asset name and release title, so a rolling tag such as `newest` still resolves to a comparable version. **Update now** downloads the build through the relay, verifies GitHub's digest when present, and hands off to a small detached helper. The helper waits for the launcher to exit, runs the NSIS installer (or copies a portable zip / AppImage / archive into place), and relaunches the launcher. On macOS, the downloaded DMG or zip is opened in Finder and the user finishes the drag-install. The published release must not be a prerelease or draft.
 
-The current app version is `0.4.0`. If the newest release has no comparable version at all, Settings explains that instead of offering a bogus update.
+The current app version is `0.4.5`. If the newest release has no comparable version at all, Settings explains that instead of offering a bogus update.
 
-Self-installation arrived in 0.2.0. Install 0.2.0 or newer manually once (run `release/MCM98 Launcher-0.4.0-win-x64.exe` after attaching it to the release); every later version can then update from inside the running launcher. A 0.1.0 build can only detect the release and open GitHub.
+Self-installation arrived in 0.2.0. Install 0.2.0 or newer manually once (run `release/MCM98 Launcher-0.4.5-win-x64.exe` after attaching it to the release); every later version can then update from inside the running launcher. A 0.1.0 build can only detect the release and open GitHub.
 
 ### Versioning and roadmap
 
 The launcher and the relay are versioned together from the same commit, so both `package.json` files carry the same number and the version shown in the titlebar, status bar, and Settings comes from `app.getVersion()`.
 
-- **Patch (`0.4.1`)** — fixes that do not change behaviour or data formats: resolver edge cases, UI regressions, copy and documentation corrections.
-- **Minor (`0.5.0`)** — new features or new persisted data. A minor bump ships `CHANGELOG.md` notes that users see in the update prompt.
-- **Major (`1.0.0`)** — reserved for the point where installs, the catalog contract, and the relay API are considered stable. Nothing before that promises compatibility on purpose; manifest and config changes so far are migrated in place.
+- **Patch (`0.4.6`)** — fixes that do not change behaviour or data formats: resolver edge cases, UI regressions, copy and documentation corrections.
+- **Minor (`0.5.0`)** — new features or new persisted data. Every minor gets a `CHANGELOG.md` section, and the published release body is what Settings shows as release notes.
+- **Major (`1.0.0`)** — reserved for the point where installs, the catalog contract, and the relay API are considered stable. Before that, compatibility is best-effort: manifest and config changes are migrated in place rather than versioned.
 
 [ROADMAP.md](ROADMAP.md) lists the planned releases, the features each one carries, and the version each change should ship under. [CHANGELOG.md](CHANGELOG.md) records what has shipped.
 
@@ -217,7 +220,7 @@ The launcher and the relay are versioned together from the same commit, so both 
 2. In Render, choose **New → Blueprint** and select the repository. `render.yaml` creates `mcm98-launcher-api`.
 3. Set `GITHUB_TOKEN` when prompted (it is marked `sync: false`, so it is never stored in the repository). Use a fine-grained personal access token, not a GitHub App private key or JWT; see [GitHub token for private repositories](#github-token-for-private-repositories).
 4. Deploy. Copy the service URL, for example `https://mcm98-launcher.onrender.com` (the address official builds use).
-5. Put that URL into the launcher's **Settings**, or bake it in at build time with `MAIN_VITE_BACKEND_URL`.
+5. Bake that URL into the launcher at build time with `MAIN_VITE_BACKEND_URL`, or you ship pointing at the hosted default. The address is shown read-only in **Settings → About**.
 
 ### Manual web service
 
@@ -295,7 +298,7 @@ cp .env.example .env
 npm run dist:win
 ```
 
-Users can still override the relay in Settings after installation.
+The relay is fixed at build time and shown read-only in **Settings → About**, so a shipped launcher cannot be pointed somewhere else by accident.
 
 ### Where files live
 
@@ -338,6 +341,7 @@ On startup the launcher repairs interrupted updates, restores a previous `app/` 
 - No accounts, profiles, SSO, game keys, or per-user entitlements yet.
 - Windows/Linux launcher updates install in place after the app exits. macOS opens the downloaded DMG/zip in Finder instead of replacing the `.app` bundle automatically.
 - Launcher updates are unsigned, like product builds. Windows SmartScreen may still warn on the helper-run installer.
+- The relay address is fixed at build time; there is no in-app override. Point a build somewhere else with `MAIN_VITE_BACKEND_URL`.
 - No delta updates, parallel chunking, or bandwidth limits. Downloads resume, but only from a single connection.
 - No 7z, DMG, or MSI installation. Supported formats are archives, portable Windows `.exe`, and Linux `.AppImage`.
 - No code signing on Windows or notarization on macOS. Users may see SmartScreen/Gatekeeper warnings; production distribution needs signing.
@@ -346,7 +350,7 @@ On startup the launcher repairs interrupted updates, restores a previous `app/` 
 - No per-release arch metadata; use explicit asset globs.
 - Rollback is crash-recovery only, not a user-facing version picker.
 
-Natural next steps: SSO profiles and entitlements, automatic launcher installer replacement, restoring a save backup, per-product news and patch notes, and relay-side access control.
+The next releases are scoped and versioned in [ROADMAP.md](ROADMAP.md): `0.4.1` fixes save detection, corrupt-install repair, and download cleanup; `0.5.0` adds save restore, patch notes, and a version picker; `0.7.0` brings profiles and relay access control; `1.0.0` is the signing and schema-stability gate.
 
 ## Scripts
 
@@ -373,7 +377,7 @@ It opens a hidden window, checks that the preload bridge exists and the React UI
 
 ## Troubleshooting
 
-- **"The relay is not answering"** — confirm the Render service is awake and the URL in Settings is exactly the service URL, with no trailing path. Free instances can take up to a minute to wake.
+- **"The relay is not answering"** — confirm the Render service is awake. Free instances can take up to a minute to wake, and the launcher retries automatically. The address it dials is listed in **Settings → About**; a build with a different relay needs `MAIN_VITE_BACKEND_URL` at build time.
 - **"No launcher release has been published yet"** — publish a stable release in `LAUNCHER_REPO` with a Windows `.exe`/`.zip`, macOS `.dmg`/`.zip`, or Linux `.AppImage`/`.tar.gz` asset. Drafts and prereleases are ignored.
 - **Launcher update prompt does not appear** — confirm the release is newer than `package.json`. The version is read from the tag, then the asset name, then the release title, so a rolling tag such as `newest` works as long as the build asset or title contains a semantic version such as `0.4.0`. The release also needs an asset for the current platform.
 - **Launcher update download or install fails** — the relay must be reachable and able to resolve `LAUNCHER_REPO`; the build must be an NSIS `.exe` or portable `.zip` on Windows, an AppImage or archive on Linux. On macOS the downloaded file is opened in Finder. In-app installation is disabled when running from source (`npm run dev`).

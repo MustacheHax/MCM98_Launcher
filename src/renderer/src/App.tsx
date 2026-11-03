@@ -606,6 +606,19 @@ function App(): JSX.Element {
     }
   }, [bridge, toast])
 
+  const discardPartials = useCallback(
+    async (productId: string): Promise<void> => {
+      if (!bridge) return
+      try {
+        await bridge.discardPartials(productId)
+        toast('Partial download removed.', 'success')
+      } catch (error) {
+        toast(errorMessage(error), 'error')
+      }
+    },
+    [bridge, toast]
+  )
+
   const uninstallProduct = useCallback(
     async (product: InstalledProduct): Promise<void> => {
       if (!bridge) return
@@ -693,6 +706,7 @@ function App(): JSX.Element {
       saveSettings,
       cancelTask,
       clearFinished,
+      discardPartials,
       toast
     }),
     [
@@ -739,6 +753,7 @@ function App(): JSX.Element {
       saveSettings,
       cancelTask,
       clearFinished,
+      discardPartials,
       toast
     ]
   )

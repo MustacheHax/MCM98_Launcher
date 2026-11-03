@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
@@ -7,15 +6,16 @@ import cors from 'cors'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import type { CatalogResponse, HealthResponse, Platform } from '../../shared/types'
 import { loadCatalog, PLATFORMS, type Catalog, type CatalogProduct } from './catalog'
-import { getGitHubTokenProblem, hasGitHubToken, openAssetStream } from './github'
+import {
+  getGitHubTokenProblem,
+  hasGitHubToken,
+  openAssetStream,
+  rateLimitRetrySeconds
+} from './github'
 import { launcherRepo, resolveLauncherAsset, resolveLauncherRelease } from './launcher'
 import { resolveProduct } from './resolver'
+import { VERSION } from './version'
 
-const packageJson = JSON.parse(
-  readFileSync(new URL('../package.json', import.meta.url), 'utf8')
-) as { version: string }
-
-const VERSION = packageJson.version
 const catalogPath =
   process.env.CATALOG_PATH?.trim() ||
   fileURLToPath(new URL('../catalog.json', import.meta.url))
@@ -284,8 +284,16 @@ app.get(
     } catch (error) {
       if (controller.signal.aborted) return
       console.error(`[download] ${product.id} (${asset.name}) failed:`, error)
+      const retryAfter = rateLimitRetrySeconds(error)
       if (!res.headersSent) {
-        res.status(502).json({ error: 'The relay could not stream this release asset.' })
+        if (retryAfter !== null) {
+          res.setHeader('Retry-After', String(retryAfter))
+          res.status(429).json({
+            error: 'GitHub rate limit reached while fetching this asset. Try again shortly.'
+          })
+        } else {
+          res.status(502).json({ error: 'The relay could not stream this release asset.' })
+        }
       } else {
         res.destroy()
       }

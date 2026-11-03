@@ -21,7 +21,17 @@ type TestState =
   | { status: 'ok'; health: HealthResponse }
   | { status: 'error'; message: string }
 
-type TabId = 'general' | 'appearance' | 'library' | 'connection' | 'updates' | 'about'
+/** The relay host, shown read-only: the launcher picks the relay itself. */
+function relayHost(value: string | undefined): string {
+  if (!value) return 'Not configured'
+  try {
+    return new URL(value).host
+  } catch {
+    return value
+  }
+}
+
+type TabId = 'general' | 'appearance' | 'library' | 'updates' | 'about'
 
 const TABS: Array<{ id: TabId; label: string; icon: IconName; description: string }> = [
   {
@@ -43,12 +53,6 @@ const TABS: Array<{ id: TabId; label: string; icon: IconName; description: strin
     description: 'Choose where downloaded builds live on this computer.'
   },
   {
-    id: 'connection',
-    label: 'Connection',
-    icon: 'catalog',
-    description: 'The relay resolves GitHub releases for the catalog.'
-  },
-  {
     id: 'updates',
     label: 'Updates',
     icon: 'refresh',
@@ -61,20 +65,6 @@ const TABS: Array<{ id: TabId; label: string; icon: IconName; description: strin
     description: 'Release and library information for this machine.'
   }
 ]
-
-function validateUrl(value: string): string | null {
-  const trimmed = value.trim()
-  if (!trimmed) return 'Enter the relay URL.'
-  try {
-    const url = new URL(trimmed)
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-      return 'The relay URL must start with http:// or https://.'
-    }
-  } catch {
-    return 'Enter a valid URL, for example https://your-service.onrender.com'
-  }
-  return null
-}
 
 interface SettingToggleProps {
   label: string
@@ -133,28 +123,22 @@ export function SettingsView(): JSX.Element {
   const bridge = getLauncher()
 
   const [tab, setTab] = useState<TabId>('general')
-  const [backendUrl, setBackendUrl] = useState(config?.backendUrl ?? '')
   const [installRoot, setInstallRoot] = useState(config?.installRoot ?? '')
   const [saving, setSaving] = useState(false)
   const [prefBusy, setPrefBusy] = useState<string | null>(null)
   const [testState, setTestState] = useState<TestState>({ status: 'idle' })
 
   useEffect(() => {
-    setBackendUrl(config?.backendUrl ?? '')
     setInstallRoot(config?.installRoot ?? '')
-  }, [config?.backendUrl, config?.installRoot])
+  }, [config?.installRoot])
 
   const skipped = Object.entries(config?.skippedUpdates ?? {}).sort(([a], [b]) =>
     a.localeCompare(b)
   )
 
-  const urlError = validateUrl(backendUrl)
   const rootError = installRoot.trim() ? null : 'Choose an install folder.'
   const nextTab = TABS.find((item) => item.id === tab)
-  const dirty = Boolean(
-    config &&
-      (backendUrl.trim() !== config.backendUrl || installRoot.trim() !== config.installRoot)
-  )
+  const dirty = Boolean(config && installRoot.trim() !== config.installRoot)
 
   const updateChecking = launcherUpdate?.state === 'checking'
   const updateAvailable = launcherUpdate?.state === 'available'
@@ -239,10 +223,10 @@ export function SettingsView(): JSX.Element {
   }
 
   const handleTest = async (): Promise<void> => {
-    if (urlError) return
+    if (!config?.backendUrl) return
     setTestState({ status: 'testing' })
     try {
-      const health = await bridge.testBackend(backendUrl.trim())
+      const health = await bridge.testBackend(config.backendUrl)
       setTestState({ status: 'ok', health })
     } catch (error) {
       setTestState({ status: 'error', message: errorMessage(error) })
@@ -259,17 +243,13 @@ export function SettingsView(): JSX.Element {
   }
 
   const handleSave = async (): Promise<void> => {
-    if (urlError || rootError || saving) {
-      if (urlError) toast(urlError, 'error')
+    if (rootError || saving) {
       if (rootError) toast(rootError, 'error')
       return
     }
     setSaving(true)
     try {
-      await saveSettings({
-        backendUrl: backendUrl.trim(),
-        installRoot: installRoot.trim()
-      })
+      await saveSettings({ installRoot: installRoot.trim() })
       toast('Settings saved.', 'success')
     } catch (error) {
       toast(errorMessage(error), 'error')
@@ -631,92 +611,6 @@ export function SettingsView(): JSX.Element {
             </div>
           )}
 
-          {tab === 'connection' && (
-            <div className="settings-stack">
-              <section className="panel settings-panel">
-                <div className="panel-heading">
-                  <span className="panel-icon">
-                    <Icon name="catalog" size={18} />
-                  </span>
-                  <div>
-                    <h2>Relay connection</h2>
-                    <p>
-                      The relay reads your selected repositories and resolves their newest GitHub
-                      releases. It never hosts your games unless an asset is private.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="field">
-                  <label className="field-label" htmlFor="relay-url">
-                    Relay URL
-                  </label>
-                  <input
-                    id="relay-url"
-                    className={`input ${urlError ? 'has-error' : ''}`}
-                    value={backendUrl}
-                    onChange={(event) => {
-                      setBackendUrl(event.target.value)
-                      setTestState({ status: 'idle' })
-                    }}
-                    placeholder="https://mcm98-launcher.onrender.com"
-                    spellCheck={false}
-                    autoCapitalize="off"
-                    autoCorrect="off"
-                    aria-invalid={Boolean(urlError)}
-                    aria-describedby={
-                      urlError ? 'relay-url-error relay-url-hint' : 'relay-url-hint'
-                    }
-                  />
-                  {urlError && (
-                    <span className="field-error" id="relay-url-error">
-                      {urlError}
-                    </span>
-                  )}
-                  <span className="field-hint" id="relay-url-hint">
-                    Use the address Render gives your web service. Free Render services sleep when
-                    idle, so the first request can take up to a minute.
-                  </span>
-                </div>
-
-                <div className="test-row">
-                  <button
-                    className="btn"
-                    onClick={() => void handleTest()}
-                    disabled={Boolean(urlError) || testState.status === 'testing' || saving}
-                  >
-                    {testState.status === 'testing' ? (
-                      <>
-                        <span className="spinner-small" />
-                        Testing…
-                      </>
-                    ) : (
-                      <>
-                        <Icon name="refresh" size={15} />
-                        Test connection
-                      </>
-                    )}
-                  </button>
-
-                  {testState.status === 'ok' && (
-                    <span className="test-result ok">
-                      <Icon name="check" size={14} />
-                      Relay v{testState.health.version} · {testState.health.catalogProducts}{' '}
-                      products · GitHub token{' '}
-                      {testState.health.githubAuthenticated ? 'configured' : 'missing'}
-                    </span>
-                  )}
-                  {testState.status === 'error' && (
-                    <span className="test-result bad">
-                      <Icon name="alert" size={14} />
-                      {testState.message}
-                    </span>
-                  )}
-                </div>
-              </section>
-            </div>
-          )}
-
           {tab === 'updates' && (
             <div className="settings-stack">
               <section className="panel settings-panel">
@@ -758,7 +652,7 @@ export function SettingsView(): JSX.Element {
                   <div className="launcher-update-head">
                     <span className={`status-dot ${updateTone}`} />
                     <span>Launcher update</span>
-                    <span className="mono">v{appInfo?.version ?? '0.4.0'}</span>
+                    <span className="mono">v{appInfo?.version ?? '0.4.5'}</span>
                   </div>
                   <p>{updateMessage}</p>
                   {updateAvailable && updateBusy && (
@@ -880,7 +774,7 @@ export function SettingsView(): JSX.Element {
                 <dl className="about-grid">
                   <div>
                     <dt>Version</dt>
-                    <dd className="mono">v{appInfo?.version ?? '0.4.0'}</dd>
+                    <dd className="mono">v{appInfo?.version ?? '0.4.5'}</dd>
                   </div>
                   <div>
                     <dt>Platform</dt>
@@ -893,6 +787,12 @@ export function SettingsView(): JSX.Element {
                   <div>
                     <dt>Build</dt>
                     <dd>{appInfo?.isPackaged ? 'Packaged' : 'Development'}</dd>
+                  </div>
+                  <div>
+                    <dt>Relay</dt>
+                    <dd className="mono" title={config?.backendUrl}>
+                      {relayHost(config?.backendUrl)}
+                    </dd>
                   </div>
                 </dl>
 
@@ -910,6 +810,14 @@ export function SettingsView(): JSX.Element {
                     <Icon name="folder" size={14} />
                     Open data folder
                   </button>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => void handleTest()}
+                    disabled={testState.status === 'testing'}
+                  >
+                    <Icon name="refresh" size={14} />
+                    {testState.status === 'testing' ? 'Testing relay…' : 'Test relay'}
+                  </button>
                   {launcherUpdate?.releaseUrl && (
                     <button
                       className="btn btn-ghost btn-sm"
@@ -920,6 +828,17 @@ export function SettingsView(): JSX.Element {
                     </button>
                   )}
                 </div>
+
+                {testState.status === 'ok' && (
+                  <p className="settings-note">
+                    <Icon name="check" size={13} /> Relay v{testState.health.version} ·{' '}
+                    {testState.health.catalogProducts} products · GitHub token{' '}
+                    {testState.health.githubAuthenticated ? 'configured' : 'missing'}
+                  </p>
+                )}
+                {testState.status === 'error' && (
+                  <p className="settings-note field-error">{testState.message}</p>
+                )}
               </section>
 
               {demoMode && (
@@ -928,8 +847,8 @@ export function SettingsView(): JSX.Element {
                   <h3>Browser preview</h3>
                   <p>
                     This page is running outside Electron, so installs, launches, window sizing,
-                    and connection tests are simulated. Run <code>npm run dev</code> to use the
-                    real launcher.
+                    and relay checks are simulated. Run <code>npm run dev</code> to use the real
+                    launcher.
                   </p>
                 </section>
               )}

@@ -24,6 +24,8 @@ const INSTALL_SAVE_DIRS = new Set([
 ])
 
 const MAX_SCAN_ENTRIES = 400
+/** Second-level scan budget for publisher folders such as `<root>/<Studio>/<Game>`. */
+const MAX_PUBLISHER_ENTRIES = 60
 const MAX_BACKUP_BYTES = 4 * 1024 * 1024 * 1024
 
 interface Candidate {
@@ -116,6 +118,8 @@ function candidateRoots(): Array<{ root: string; source: NonNullable<SaveInfo['s
   if (process.platform === 'win32') {
     push(process.env.APPDATA, 'appData')
     push(process.env.LOCALAPPDATA, 'appData')
+    // Unity titles write under LocalLow, which sits outside the roaming folder.
+    push(join(homedir(), 'AppData', 'LocalLow'), 'appData')
     try {
       push(app.getPath('appData'), 'appData')
     } catch {
@@ -148,25 +152,69 @@ async function rootCandidates(product: InstalledProduct): Promise<Candidate[]> {
     }
 
     let scanned = 0
+    const unmatched: string[] = []
     for (const entry of entries) {
       if (scanned >= MAX_SCAN_ENTRIES) break
       scanned += 1
       if (!entry.isDirectory()) continue
+      if (entry.name.startsWith('.')) continue
       const score = nameScore(entry.name, variants)
-      if (score === 0) continue
+      if (score === 0) {
+        if (unmatched.length < MAX_PUBLISHER_ENTRIES) unmatched.push(entry.name)
+        continue
+      }
 
       const path = join(root, entry.name)
       if (!(await isNonEmptyDirectory(path))) continue
       found.push({ path, source, score })
+    }
+
+    found.push(...(await publisherCandidates(root, unmatched, variants, source)))
+  }
+  return found
+}
+
+/**
+ * Games that nest their data under a studio folder (`<root>/<Studio>/<Game>`,
+ * which is also how Unity stores `Company/Product`). A nested match scores one
+ * point below a direct match, so an exact top-level folder still wins.
+ */
+async function publisherCandidates(
+  root: string,
+  parents: string[],
+  variants: string[],
+  source: NonNullable<SaveInfo['source']>
+): Promise<Candidate[]> {
+  const found: Candidate[] = []
+  for (const parent of parents) {
+    let children
+    try {
+      children = await readdir(join(root, parent), { withFileTypes: true })
+    } catch {
+      continue
+    }
+
+    let scanned = 0
+    for (const child of children) {
+      if (scanned >= MAX_PUBLISHER_ENTRIES) break
+      scanned += 1
+      if (!child.isDirectory() || child.name.startsWith('.')) continue
+      const score = nameScore(child.name, variants)
+      if (score === 0) continue
+
+      const path = join(root, parent, child.name)
+      if (!(await isNonEmptyDirectory(path))) continue
+      found.push({ path, source, score: score - 1 })
     }
   }
   return found
 }
 
 /**
- * Finds the most plausible save folder for an installed product. Installs that
- * keep saves beside the executable win, then folders named after the product in
- * the platform's user-data locations; ties break toward the most recent write.
+ * Finds the most plausible save folder for an installed product. Ranking, best
+ * first: an exact product-named folder in a user-data location, a save folder
+ * inside the install, a nested studio folder, then a fuzzy name match. Ties
+ * break toward the most recent write.
  */
 export async function detectSaveDirectory(product: InstalledProduct): Promise<SaveInfo> {
   const candidates = [...(await installCandidates(product)), ...(await rootCandidates(product))]

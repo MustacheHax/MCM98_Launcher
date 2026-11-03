@@ -1,3 +1,5 @@
+import { VERSION } from './version'
+
 export interface GitHubAsset {
   id: number
   name: string
@@ -39,7 +41,7 @@ export interface RepoSnapshot {
 }
 
 const API_BASE = 'https://api.github.com'
-const USER_AGENT = 'mcm98-launcher-relay/0.2'
+const USER_AGENT = `mcm98-launcher-relay/${VERSION}`
 const configuredTtl = Number(process.env.CACHE_TTL_SECONDS ?? 300)
 const SUCCESS_TTL_MS = (Number.isFinite(configuredTtl) ? Math.max(30, configuredTtl) : 300) * 1000
 const ERROR_TTL_MS = 60_000
@@ -47,13 +49,48 @@ const ERROR_TTL_MS = 60_000
 class GitHubError extends Error {
   readonly status: number
   readonly rateLimited: boolean
+  readonly retryAfterSeconds: number | null
 
-  constructor(message: string, status: number, rateLimited = false) {
+  constructor(
+    message: string,
+    status: number,
+    rateLimited = false,
+    retryAfterSeconds: number | null = null
+  ) {
     super(message)
     this.name = 'GitHubError'
     this.status = status
     this.rateLimited = rateLimited
+    this.retryAfterSeconds = retryAfterSeconds
   }
+}
+
+/**
+ * Reads how long GitHub wants the caller to wait: `Retry-After` when present,
+ * otherwise the reset time GitHub reports for the API window.
+ */
+function retryAfterSeconds(headers: Headers): number | null {
+  const retryAfter = headers.get('retry-after')
+  if (retryAfter) {
+    const seconds = Number(retryAfter)
+    if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds)
+    const date = Date.parse(retryAfter)
+    if (Number.isFinite(date)) return Math.max(0, Math.ceil((date - Date.now()) / 1000))
+  }
+
+  const reset = headers.get('x-ratelimit-reset')
+  if (reset) {
+    const epoch = Number(reset)
+    if (Number.isFinite(epoch)) return Math.max(0, Math.ceil(epoch - Date.now() / 1000))
+  }
+  return null
+}
+
+/** The wait GitHub asked for, when an error was caused by rate limiting. */
+export function rateLimitRetrySeconds(error: unknown): number | null {
+  return error instanceof GitHubError && error.rateLimited
+    ? error.retryAfterSeconds
+    : null
 }
 
 const snapshotCache = new Map<string, RepoSnapshot & { expiresAt: number }>()
@@ -201,17 +238,22 @@ async function request<T>(path: string): Promise<T> {
     }
 
     const remaining = response.headers.get('x-ratelimit-remaining')
+    const wait = retryAfterSeconds(response.headers)
     const rateLimited =
-      (response.status === 403 || response.status === 429) && remaining === '0'
+      (response.status === 403 || response.status === 429) &&
+      (remaining === '0' || wait !== null)
 
     if (response.status === 404) {
       throw new GitHubError('Not found', 404)
     }
     if (rateLimited) {
       throw new GitHubError(
-        'GitHub API rate limit reached. Add a GITHUB_TOKEN to the relay or try again later.',
+        `GitHub API rate limit reached. Add a GITHUB_TOKEN to the relay or try again${
+          wait === null ? ' later' : ` in ${wait}s`
+        }.`,
         403,
-        true
+        true,
+        wait
       )
     }
     if (response.status === 401) {
@@ -268,13 +310,18 @@ export async function openAssetStream(
   }
 
   if (!response.ok) {
-    const rateLimited = response.headers.get('x-ratelimit-remaining') === '0'
+    const wait = retryAfterSeconds(response.headers)
+    const rateLimited =
+      response.headers.get('x-ratelimit-remaining') === '0' || wait !== null
     throw new GitHubError(
       rateLimited
-        ? 'GitHub API rate limit reached while fetching the release asset.'
+        ? `GitHub API rate limit reached while fetching the release asset${
+            wait === null ? '' : `; retry in ${wait}s`
+          }.`
         : `GitHub returned HTTP ${response.status} for the release asset.`,
       response.status,
-      rateLimited
+      rateLimited,
+      wait
     )
   }
   return response

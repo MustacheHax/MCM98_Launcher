@@ -1,4 +1,4 @@
-import { net } from 'electron'
+import { app, net } from 'electron'
 import type {
   CatalogResponse,
   HealthResponse,
@@ -10,12 +10,27 @@ import type { Logger } from './logger'
 
 export class RelayError extends Error {
   readonly retryable: boolean
+  /** Wait suggested by the relay's `Retry-After`, in milliseconds. */
+  readonly retryAfterMs: number | null
 
-  constructor(message: string, retryable = false) {
+  constructor(message: string, retryable = false, retryAfterMs: number | null = null) {
     super(message)
     this.name = 'RelayError'
     this.retryable = retryable
+    this.retryAfterMs = retryAfterMs
   }
+}
+
+/** A waking Render instance can ask for a long wait; never block the UI that long. */
+const MAX_RETRY_WAIT_MS = 8_000
+
+function parseRetryAfter(value: string | null): number | null {
+  if (!value) return null
+  const seconds = Number(value)
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1000)
+  const date = Date.parse(value)
+  if (Number.isFinite(date)) return Math.max(0, date - Date.now())
+  return null
 }
 
 interface FetchOptions {
@@ -45,18 +60,26 @@ async function requestJson<T>(
     try {
       const response = await net.fetch(url, {
         signal: controller.signal,
-        headers: { Accept: 'application/json', 'User-Agent': 'MCM98-Launcher/0.2' }
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': `MCM98-Launcher/${app.getVersion()}`
+        }
       })
 
       if (!response.ok) {
         const detail = await readErrorDetail(response)
-        const retryable = [502, 503, 504].includes(response.status)
-        throw new RelayError(
+        const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'))
+        const retryable =
+          retryAfterMs !== null || [429, 502, 503, 504].includes(response.status)
+        const message =
           response.status === 503
             ? 'The relay is waking up. Try again in a moment.'
-            : `The relay returned HTTP ${response.status}${detail ? `: ${detail}` : ''}.`,
-          retryable
-        )
+            : response.status === 429
+              ? `The relay is busy right now${
+                  retryAfterMs ? `; try again in ${Math.ceil(retryAfterMs / 1000)}s` : ''
+                }.`
+              : `The relay returned HTTP ${response.status}${detail ? `: ${detail}` : ''}.`
+        throw new RelayError(message, retryable, retryAfterMs)
       }
 
       return (await response.json()) as T
@@ -70,7 +93,12 @@ async function requestJson<T>(
         if (/HTTP 4\d\d/.test(normalized.message)) break
       }
       if (attempt < attempts) {
-        await delay(retryDelayMs * attempt)
+        const suggested = normalized instanceof RelayError ? normalized.retryAfterMs : null
+        await delay(
+          suggested !== null
+            ? Math.min(suggested, MAX_RETRY_WAIT_MS)
+            : retryDelayMs * attempt + Math.round(Math.random() * 500)
+        )
       }
     } finally {
       clearTimeout(timer)
@@ -91,7 +119,7 @@ function normalizeError(error: unknown, url: string): RelayError {
   }
   if (error instanceof Error && /fetch failed|net::|ECONNREFUSED|ENOTFOUND/i.test(error.message)) {
     return new RelayError(
-      `Could not reach the relay at ${host}. Check the relay URL in Settings and that the Render service is running.`,
+      `Could not reach the relay at ${host}. The launcher dials its bundled relay automatically, so check that the service is deployed and awake.`,
       true
     )
   }

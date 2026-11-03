@@ -265,16 +265,16 @@ export function createDemoApi(): LauncherApi {
   const timers = new Map<string, { interval: number | null; timeouts: number[] }>()
   let launcherUpdate: LauncherUpdateInfo = {
     state: 'available',
-    currentVersion: '0.4.0',
-    latestVersion: '0.4.1',
-    releaseName: 'Launcher 0.4.1',
+    currentVersion: '0.4.5',
+    latestVersion: '0.5.0',
+    releaseName: 'Launcher 0.5.0',
     releaseUrl: 'https://github.com/MustacheHax/MCM98_Launcher/releases',
     publishedAt: '2026-10-27T18:00:00Z',
     notes: 'Launcher update preview for the browser demo.',
-    assetName: 'MCM98 Launcher-0.4.1-win-x64.exe',
+    assetName: 'MCM98 Launcher-0.5.0-win-x64.exe',
     assetSize: 121_000_000,
     assetDownloadUrl:
-      'https://github.com/MustacheHax/MCM98_Launcher/releases/download/v0.4.1/MCM98-Launcher-0.4.1-win-x64.exe',
+      'https://github.com/MustacheHax/MCM98_Launcher/releases/download/v0.5.0/MCM98-Launcher-0.5.0-win-x64.exe',
     assetDigest: null,
     checkedAt: new Date().toISOString(),
     error: null,
@@ -432,7 +432,7 @@ export function createDemoApi(): LauncherApi {
       await wait(700)
       const health: HealthResponse = {
         ok: true,
-        version: '0.4.0',
+        version: '0.4.5',
         timestamp: new Date().toISOString(),
         catalogProducts: buildCatalogProducts().length,
         githubAuthenticated: true
@@ -442,7 +442,7 @@ export function createDemoApi(): LauncherApi {
 
     async getAppInfo() {
       const info: AppInfo = {
-        version: '0.4.0',
+        version: '0.4.5',
         platform: 'win32',
         arch: 'x64',
         isPackaged: false,
@@ -456,7 +456,7 @@ export function createDemoApi(): LauncherApi {
     async fetchCatalog() {
       await wait(720)
       const response: CatalogResponse = {
-        backendVersion: '0.4.0',
+        backendVersion: '0.4.5',
         generatedAt: new Date().toISOString(),
         platform: 'win32',
         products: buildCatalogProducts()
@@ -596,6 +596,10 @@ export function createDemoApi(): LauncherApi {
         if (['done', 'error', 'cancelled'].includes(task.phase)) tasks.delete(id)
       }
       emitTasks()
+    },
+
+    async discardPartials() {
+      await wait(180)
     },
 
     async uninstall(productId) {

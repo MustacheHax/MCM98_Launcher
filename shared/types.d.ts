@@ -290,6 +290,8 @@ export interface LauncherApi {
   cancelInstall(taskId: string): Promise<void>
   getTasks(): Promise<InstallTask[]>
   clearFinishedTasks(): Promise<void>
+  /** Drops any partial download kept for resuming this product. */
+  discardPartials(productId: string): Promise<void>
   uninstall(productId: string): Promise<void>
 
   launch(productId: string): Promise<{ pid: number }>
