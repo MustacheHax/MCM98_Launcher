@@ -1,11 +1,24 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, describe, it } from 'node:test'
 import type { InstalledProduct } from '../shared/types'
+import type { Logger } from '../src/main/logger'
 import type { SaveRoot } from '../src/main/saves'
-import { detectSaveDirectory } from '../src/main/saves'
+import {
+  backupSaves,
+  detectSaveDirectory,
+  listSaveBackups,
+  restoreSaves
+} from '../src/main/saves'
+
+const log = {
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {}
+} as unknown as Logger
 
 const base = mkdtempSync(join(tmpdir(), 'mcm98-saves-'))
 after(() => rmSync(base, { recursive: true, force: true }))
@@ -32,7 +45,8 @@ function product(name: string, id: string, appPath: string): InstalledProduct {
     installPath: join(appPath, '..'),
     appPath,
     executablePath: null,
-    sizeBytes: 1
+    sizeBytes: 1,
+    previousVersion: null
   }
 }
 
@@ -89,5 +103,45 @@ describe('detectSaveDirectory', () => {
     assert.equal(found.path, null)
     assert.equal(found.exists, false)
     assert.equal(found.source, null)
+  })
+})
+
+describe('save backups', () => {
+  const dataRoot = join(base, 'restore-data')
+  const roots: SaveRoot[] = [{ path: join(base, 'restore', 'local'), source: 'appData' }]
+  const savePath = seed(roots[0]?.path as string, 'Hollow Signal')
+  const installed = product(
+    'Hollow Signal',
+    'hollow-signal',
+    join(base, 'restore', 'install', 'app')
+  )
+
+  it('archives, lists, and restores the detected save folder', async () => {
+    const backup = await backupSaves(installed, dataRoot, log, roots)
+    const listed = await listSaveBackups('hollow-signal', dataRoot)
+
+    assert.equal(listed.length, 1)
+    assert.equal(listed[0]?.path, backup.path)
+    assert.ok(listed[0]?.bytes > 0)
+
+    writeFileSync(join(savePath, 'save.dat'), 'newer progress')
+    writeFileSync(join(savePath, 'settings.dat'), 'keep me')
+
+    const result = await restoreSaves(installed, dataRoot, backup.path, log, roots)
+
+    // The archived file is restored; a file the backup never contained survives.
+    assert.equal(readFileSync(join(savePath, 'save.dat'), 'utf8'), 'progress')
+    assert.equal(readFileSync(join(savePath, 'settings.dat'), 'utf8'), 'keep me')
+    assert.ok(result.files >= 1)
+  })
+
+  it('refuses a file outside the launcher backup folder', async () => {
+    const outside = join(base, 'evil.tar.gz')
+    writeFileSync(outside, 'not an archive')
+
+    await assert.rejects(
+      () => restoreSaves(installed, dataRoot, outside, log, roots),
+      /not a save backup/
+    )
   })
 })

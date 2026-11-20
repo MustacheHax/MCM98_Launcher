@@ -12,7 +12,11 @@ import type {
   PlayRecord,
   PlayState,
   ProductEntry,
+  ProductRelease,
+  ProductReleasesResponse,
   Platform,
+  RestoreSavesResult,
+  SaveBackup,
   SaveInfo
 } from '@shared/types'
 
@@ -187,7 +191,8 @@ function installedFrom(
     installPath,
     appPath: `${installPath}\\app`,
     executablePath: `${installPath}\\app\\${executable.replace(/\//g, '\\')}`,
-    sizeBytes
+    sizeBytes,
+    previousVersion: null
   }
 }
 
@@ -196,7 +201,10 @@ function seedLibrary(): InstalledProduct[] {
   const hollow = products.find((product) => product.id === 'hollow-signal') as ProductEntry
   const foundry = products.find((product) => product.id === 'foundry-tools') as ProductEntry
   return [
-    installedFrom(hollow, 'v2.0.1', '2026-09-27T20:10:00Z', 2_415_919_104),
+    {
+      ...installedFrom(hollow, 'v2.0.1', '2026-09-27T20:10:00Z', 2_415_919_104),
+      previousVersion: 'v2.0.0'
+    },
     installedFrom(foundry, 'v0.9.7', '2026-10-02T11:30:00Z', 149_331_968)
   ]
 }
@@ -327,7 +335,8 @@ export function createDemoApi(): LauncherApi {
       installPath,
       appPath: `${installPath}\\app`,
       executablePath: `${installPath}\\app\\${executable.replace(/\//g, '\\')}`,
-      sizeBytes: request.sizeBytes
+      sizeBytes: request.sizeBytes,
+      previousVersion: existing?.version ?? null
     }
     installed = [...installed.filter((item) => item.id !== request.productId), record]
     clearTaskTimers(task.id)
@@ -662,6 +671,98 @@ export function createDemoApi(): LauncherApi {
         bytes: 18_874_368
       }
       return result
+    },
+
+    async listSaveBackups(productId) {
+      await wait(140)
+      const folder = `C:\\Users\\Demo\\AppData\\Roaming\\MCM98 Launcher\\backups`
+      const make = (daysAgo: number, bytes: number): SaveBackup => {
+        const createdAt = new Date(Date.now() - daysAgo * 86_400_000).toISOString()
+        const fileName = `${productId}-saves-${createdAt.slice(0, 19).replace(/[:T]/g, '-')}.tar.gz`
+        return { path: `${folder}\\${fileName}`, fileName, createdAt, bytes }
+      }
+      return [make(1, 18_874_368), make(4, 17_204_224)]
+    },
+
+    async restoreSaves(productId) {
+      await wait(700)
+      const result: RestoreSavesResult = {
+        path: `C:\\Users\\Demo\\AppData\\Roaming\\${productId}`,
+        files: 42,
+        bytes: 18_874_368
+      }
+      return result
+    },
+
+    async rollback(productId) {
+      await wait(550)
+      const product = installed.find((item) => item.id === productId)
+      if (!product?.previousVersion) {
+        throw new Error('No previous version is stored for this product.')
+      }
+      const previous = product.previousVersion
+      installed = installed.map((item) =>
+        item.id === productId
+          ? { ...item, version: previous, previousVersion: null }
+          : item
+      )
+      emitLibrary()
+    },
+
+    async listProductReleases(productId) {
+      await wait(150)
+      const product = buildCatalogProducts().find((item) => item.id === productId)
+      const latest = product?.release
+      if (!product || !latest) {
+        const response: ProductReleasesResponse = {
+          productId,
+          platform: 'win32',
+          releases: [],
+          error: 'This product has no releases in the demo catalog.'
+        }
+        return response
+      }
+
+      const version = latest.tag.replace(/^v/i, '')
+      const older = (tag: string, publishedAt: string, notes: string): ProductRelease => ({
+        tag,
+        version: tag.replace(/^v/i, ''),
+        name: `${product.name} ${tag}`,
+        publishedAt,
+        prerelease: false,
+        url: latest.url,
+        notes,
+        asset: {
+          ...latest.asset,
+          name: latest.asset.name.split(version).join(tag.replace(/^v/i, ''))
+        },
+        error: null
+      })
+
+      const releases: ProductRelease[] = [
+        {
+          tag: latest.tag,
+          version,
+          name: latest.name,
+          publishedAt: latest.publishedAt,
+          prerelease: latest.prerelease,
+          url: latest.url,
+          notes: latest.notes,
+          asset: latest.asset,
+          error: null
+        },
+        older(
+          'v2.0.1',
+          '2026-09-27T20:10:00Z',
+          '## 2.0.1\n\n- Fixed a save corruption issue in the antenna yard\n- Radio subtitles stay in sync after a reload'
+        ),
+        older(
+          'v2.0.0',
+          '2026-08-30T18:00:00Z',
+          '## 2.0.0\n\n- The Transmission Floor opens\n- Three manual save slots\n- Rebuilt the audio mixer'
+        )
+      ]
+      return { productId, platform: 'win32', releases, error: null }
     },
 
     async openPath() {

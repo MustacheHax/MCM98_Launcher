@@ -25,6 +25,9 @@ import type {
   LauncherUpdateInfo,
   PlayState,
   Platform,
+  ProductReleasesResponse,
+  RestoreSavesResult,
+  SaveBackup,
   SaveInfo,
   WindowBounds
 } from '@shared/types'
@@ -42,9 +45,9 @@ import { LaunchService } from './launch'
 import { LibraryService } from './library'
 import { Logger } from './logger'
 import { PlayStateStore } from './playState'
-import { checkBackend } from './relay'
+import { checkBackend, fetchProductReleases } from './relay'
 import { defaultSaveRoots } from './saveRoots'
-import { backupSaves, detectSaveDirectory } from './saves'
+import { backupSaves, detectSaveDirectory, listSaveBackups, restoreSaves } from './saves'
 import { LauncherUpdater } from './updater'
 
 app.setName('MCM98 Launcher')
@@ -375,6 +378,18 @@ function registerIpc(): void {
     return updater.install()
   })
 
+  ipcMain.handle(
+    IPC.listProductReleases,
+    (_event, productId: string): Promise<ProductReleasesResponse> => {
+      return fetchProductReleases(
+        config.get(),
+        currentPlatform(),
+        String(productId ?? ''),
+        logger
+      )
+    }
+  )
+
   ipcMain.handle(IPC.listLibrary, (): Promise<InstalledProduct[]> => library.list())
 
   ipcMain.handle(IPC.startInstall, (_event, request: InstallRequest): InstallTask => {
@@ -389,6 +404,10 @@ function registerIpc(): void {
 
   ipcMain.handle(IPC.clearFinishedTasks, (): void => {
     installer.clearFinished()
+  })
+
+  ipcMain.handle(IPC.rollback, (_event, productId: string): Promise<void> => {
+    return installer.rollback(String(productId ?? ''))
   })
 
   ipcMain.handle(IPC.discardPartials, async (_event, productId: string): Promise<void> => {
@@ -442,6 +461,40 @@ function registerIpc(): void {
     if (!product) throw new Error('That product is not installed.')
     return backupSaves(product, config.dataRoot, logger, defaultSaveRoots())
   })
+
+  ipcMain.handle(
+    IPC.listSaveBackups,
+    async (_event, productId: string): Promise<SaveBackup[]> => {
+      const product = await library.read(String(productId ?? ''))
+      if (!product) throw new Error('That product is not installed.')
+      return listSaveBackups(product.id, config.dataRoot)
+    }
+  )
+
+  ipcMain.handle(
+    IPC.restoreSaves,
+    async (
+      _event,
+      productId: string,
+      backupPath: string
+    ): Promise<RestoreSavesResult> => {
+      const product = await library.read(String(productId ?? ''))
+      if (!product) throw new Error('That product is not installed.')
+      if (launch.isRunning(product.id)) {
+        throw new Error('Close the product before restoring its saves.')
+      }
+      if (installer.hasActiveProduct(product.id)) {
+        throw new Error('Wait for the current install to finish before restoring saves.')
+      }
+      return restoreSaves(
+        product,
+        config.dataRoot,
+        String(backupPath ?? ''),
+        logger,
+        defaultSaveRoots()
+      )
+    }
+  )
 
   ipcMain.handle(
     IPC.openPath,

@@ -52,6 +52,29 @@ export interface ProductEntry {
   install: InstallHint | null
 }
 
+/** One published release of a catalog product, resolved for this platform. */
+export interface ProductRelease {
+  tag: string
+  /** Comparable version, or the raw tag when no version could be derived. */
+  version: string
+  name: string
+  publishedAt: string
+  prerelease: boolean
+  url: string
+  notes: string | null
+  /** Null when this release has no installable build for the platform. */
+  asset: AssetInfo | null
+  /** Why an asset was not available, when asset is null. */
+  error: string | null
+}
+
+export interface ProductReleasesResponse {
+  productId: string
+  platform: Platform
+  releases: ProductRelease[]
+  error: string | null
+}
+
 export interface CatalogResponse {
   backendVersion: string
   generatedAt: string
@@ -175,6 +198,22 @@ export interface BackupResult {
   bytes: number
 }
 
+/** A `.tar.gz` save archive already stored in the launcher's data folder. */
+export interface SaveBackup {
+  path: string
+  fileName: string
+  /** ISO timestamp of when the archive was written. */
+  createdAt: string
+  bytes: number
+}
+
+export interface RestoreSavesResult {
+  /** The save folder that was written to. */
+  path: string
+  files: number
+  bytes: number
+}
+
 export interface LauncherConfig {
   /** Base URL of the Render relay, without a trailing slash. */
   backendUrl: string
@@ -231,6 +270,8 @@ export interface InstalledProduct {
   appPath: string
   executablePath: string | null
   sizeBytes: number
+  /** Version kept in the local rollback snapshot, when one exists. */
+  previousVersion: string | null
 }
 
 export type InstallPhase =
@@ -298,9 +339,16 @@ export interface LauncherApi {
   getRunning(): Promise<string[]>
   getPlayState(): Promise<PlayState>
 
+  listProductReleases(productId: string): Promise<ProductReleasesResponse>
+
   getSaveInfo(productId: string): Promise<SaveInfo>
   openSaveFolder(productId: string): Promise<void>
   backupSaves(productId: string): Promise<BackupResult>
+  listSaveBackups(productId: string): Promise<SaveBackup[]>
+  restoreSaves(productId: string, backupPath: string): Promise<RestoreSavesResult>
+
+  /** Swaps the local rollback snapshot back into the install. */
+  rollback(productId: string): Promise<void>
 
   openPath(target: 'installRoot' | 'product' | 'data', productId?: string): Promise<void>
   openExternal(url: string): Promise<void>

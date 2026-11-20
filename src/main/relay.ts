@@ -4,7 +4,8 @@ import type {
   HealthResponse,
   LauncherConfig,
   LauncherReleaseResponse,
-  Platform
+  Platform,
+  ProductReleasesResponse
 } from '@shared/types'
 import type { Logger } from './logger'
 
@@ -214,6 +215,42 @@ export async function fetchCatalog(
     bypassCache: true
   })
   assertCatalog(payload)
+  return payload
+}
+
+function assertProductReleases(
+  payload: unknown
+): asserts payload is ProductReleasesResponse {
+  if (!payload || typeof payload !== 'object') {
+    throw new RelayError('The relay returned an invalid release list.')
+  }
+  const response = payload as Partial<ProductReleasesResponse>
+  if (
+    typeof response.productId !== 'string' ||
+    !Array.isArray(response.releases)
+  ) {
+    throw new RelayError('The relay returned a release list the launcher cannot read.')
+  }
+}
+
+/** Release history for one product: patch notes and the version picker. */
+export async function fetchProductReleases(
+  config: LauncherConfig,
+  platform: Platform,
+  productId: string,
+  log: Logger
+): Promise<ProductReleasesResponse> {
+  const url = joinUrl(
+    config.backendUrl,
+    `/api/releases/${encodeURIComponent(productId)}?platform=${encodeURIComponent(platform)}`
+  )
+  const payload = await requestJson<unknown>(url, log, {
+    attempts: 2,
+    timeoutMs: 30_000,
+    retryDelayMs: 1_500,
+    bypassCache: true
+  })
+  assertProductReleases(payload)
   return payload
 }
 

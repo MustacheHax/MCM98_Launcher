@@ -4,16 +4,22 @@ import { fileURLToPath } from 'node:url'
 import compression from 'compression'
 import cors from 'cors'
 import express, { type NextFunction, type Request, type Response } from 'express'
-import type { CatalogResponse, HealthResponse, Platform } from '../../shared/types'
+import type {
+  CatalogResponse,
+  HealthResponse,
+  Platform,
+  ProductReleasesResponse
+} from '../../shared/types'
 import { loadCatalog, PLATFORMS, type Catalog, type CatalogProduct } from './catalog'
 import {
   getGitHubTokenProblem,
+  getReleaseHistory,
   hasGitHubToken,
   openAssetStream,
   rateLimitRetrySeconds
 } from './github'
 import { launcherRepo, resolveLauncherAsset, resolveLauncherRelease } from './launcher'
-import { resolveProduct } from './resolver'
+import { resolveProduct, resolveReleaseAsset, toProductRelease } from './resolver'
 import { VERSION } from './version'
 
 const catalogPath =
@@ -127,7 +133,9 @@ app.get('/', (_req, res) => {
       '/api/catalog?platform=win32',
       '/api/launcher?platform=win32',
       '/api/launcher/download?platform=win32',
-      '/api/download/:productId?platform=win32'
+      '/api/releases/:productId?platform=win32',
+      '/api/download/:productId?platform=win32',
+      '/api/download/:productId/:tag?platform=win32'
     ]
   })
 })
@@ -240,6 +248,118 @@ app.get(
       console.error(`[launcher] ${asset.name} failed:`, error)
       if (!res.headersSent) {
         res.status(502).json({ error: 'The relay could not stream this launcher build.' })
+      } else {
+        res.destroy()
+      }
+    }
+  })
+)
+
+app.get(
+  '/api/releases/:productId',
+  asyncRoute(async (req, res) => {
+    const platform = parsePlatform(req, res)
+    if (!platform) return
+
+    const productId = typeof req.params.productId === 'string' ? req.params.productId : ''
+    const product = productById.get(productId)
+    if (!product) {
+      res.status(404).json({ error: 'Unknown product.' })
+      return
+    }
+
+    try {
+      const releases = await getReleaseHistory(product.repo, 10)
+      const payload: ProductReleasesResponse = {
+        productId,
+        platform,
+        releases: releases.map((release) =>
+          toProductRelease(release, product, platform, publicBaseUrl(req))
+        ),
+        error: null
+      }
+      // Patch notes are only useful when they are current.
+      res.setHeader('Cache-Control', 'no-store')
+      res.json(payload)
+    } catch (error) {
+      console.error(`[releases] ${productId} failed:`, error)
+      res.status(502).json({
+        error: error instanceof Error ? error.message : 'The relay could not list releases.'
+      })
+    }
+  })
+)
+
+app.get(
+  '/api/download/:productId/:tag',
+  asyncRoute(async (req, res) => {
+    const platform = parsePlatform(req, res)
+    if (!platform) return
+
+    const productId = typeof req.params.productId === 'string' ? req.params.productId : ''
+    const tag = typeof req.params.tag === 'string' ? req.params.tag : ''
+    const product = productById.get(productId)
+    if (!product) {
+      res.status(404).json({ error: 'Unknown product.' })
+      return
+    }
+
+    let resolved
+    try {
+      resolved = await resolveReleaseAsset(product, platform, tag)
+    } catch (error) {
+      console.error(`[download] ${productId}@${tag} failed:`, error)
+      const retryAfter = rateLimitRetrySeconds(error)
+      if (retryAfter !== null) {
+        res.setHeader('Retry-After', String(retryAfter))
+        res.status(429).json({
+          error: 'GitHub rate limit reached while resolving this release. Try again shortly.'
+        })
+      } else {
+        res.status(404).json({
+          error: error instanceof Error ? error.message : 'This release could not be found.'
+        })
+      }
+      return
+    }
+
+    const asset = resolved.asset
+    if (!asset) {
+      res.status(404).json({
+        error: resolved.error ?? 'This release has no downloadable build for this platform.'
+      })
+      return
+    }
+
+    if (resolved.repo?.private !== true && process.env.FORCE_RELAY !== '1') {
+      res.redirect(302, asset.browser_download_url)
+      return
+    }
+
+    const controller = new AbortController()
+    res.on('close', () => {
+      if (!res.writableEnded) controller.abort()
+    })
+
+    try {
+      await streamAsset(
+        res,
+        openAssetStream(product.repo, asset.id, controller.signal, requestedRange(req)),
+        asset
+      )
+    } catch (error) {
+      if (controller.signal.aborted) return
+      console.error(`[download] ${product.id}@${tag} (${asset.name}) failed:`, error)
+      const retryAfter = rateLimitRetrySeconds(error)
+      if (!res.headersSent) {
+        if (retryAfter !== null) {
+          res.setHeader('Retry-After', String(retryAfter))
+          res.status(429).json({
+            error: 'GitHub rate limit reached while fetching this asset. Try again shortly.'
+          })
+        } else {
+          res.status(502).json({ error: 'The relay could not stream this release asset.' })
+        }
       } else {
         res.destroy()
       }

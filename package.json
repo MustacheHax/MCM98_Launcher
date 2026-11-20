@@ -14,7 +14,7 @@
     "dev:ui": "vite --config vite.web.config.mts",
     "build": "npm run typecheck && electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "test": "node --import tsx --test test/download.test.mts test/playState.test.mts test/saves.test.mts",
+    "test": "node --import tsx --test test/download.test.mts test/playState.test.mts test/saves.test.mts test/version.test.mts",
     "start": "electron-vite preview",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win",

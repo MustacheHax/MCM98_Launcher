@@ -331,6 +331,45 @@ async function fetchRepo(repo: string): Promise<GitHubRepo> {
   return request<GitHubRepo>(`/repos/${repo}`)
 }
 
+const releaseListCache = new Map<
+  string,
+  { releases: GitHubRelease[]; expiresAt: number }
+>()
+
+/**
+ * The newest releases for patch notes and the version picker. A short cache
+ * keeps a drawer refresh from spending a whole catalog's API budget, and a
+ * failed refresh still answers from the last good list.
+ */
+export async function getReleaseHistory(
+  repo: string,
+  limit = 10
+): Promise<GitHubRelease[]> {
+  const perPage = Math.min(Math.max(limit, 1), 30)
+  const key = `${repo.toLowerCase()}|${perPage}`
+  const cached = releaseListCache.get(key)
+  if (cached && cached.expiresAt > Date.now()) return cached.releases
+
+  try {
+    const releases = (
+      await request<GitHubRelease[]>(`/repos/${repo}/releases?per_page=${perPage}`)
+    ).filter((release) => !release.draft)
+    releaseListCache.set(key, { releases, expiresAt: Date.now() + SUCCESS_TTL_MS })
+    return releases
+  } catch (error) {
+    if (cached) {
+      console.warn(`[github] serving stale release history for ${repo}`)
+      return cached.releases
+    }
+    throw error
+  }
+}
+
+/** Resolves one exact release, used when installing an older version. */
+export async function fetchReleaseByTag(repo: string, tag: string): Promise<GitHubRelease> {
+  return request<GitHubRelease>(`/repos/${repo}/releases/tags/${encodeURIComponent(tag)}`)
+}
+
 async function fetchRelease(repo: string, includePrereleases: boolean): Promise<GitHubRelease> {
   if (includePrereleases) {
     const releases = await request<GitHubRelease[]>(`/repos/${repo}/releases?per_page=10`)

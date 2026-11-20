@@ -4,10 +4,13 @@ import type {
   InstallHint,
   Platform,
   ProductEntry,
+  ProductRelease,
   ReleaseInfo
 } from '../../shared/types'
+import { versionFromText } from '../../shared/version'
 import { PLATFORMS, type CatalogProduct } from './catalog'
 import {
+  fetchReleaseByTag,
   getRepoSnapshot,
   type GitHubAsset,
   type GitHubRelease,
@@ -215,9 +218,14 @@ function toAssetInfo(
   platform: Platform,
   asset: GitHubAsset,
   viaRelay: boolean,
-  baseUrl: string
+  baseUrl: string,
+  /** When set, the download endpoint resolves this release instead of latest. */
+  tag?: string
 ): AssetInfo {
-  const relayUrl = new URL(`/api/download/${encodeURIComponent(productId)}`, baseUrl)
+  const path = tag
+    ? `/api/download/${encodeURIComponent(productId)}/${encodeURIComponent(tag)}`
+    : `/api/download/${encodeURIComponent(productId)}`
+  const relayUrl = new URL(path, baseUrl)
   relayUrl.searchParams.set('platform', platform)
   return {
     name: asset.name,
@@ -247,6 +255,66 @@ function toReleaseInfo(
  * Resolves one catalog entry for a platform, including the raw asset needed by
  * the relay download endpoint.
  */
+/** Comparable version for a historical release, or its tag when none exists. */
+function releaseVersion(release: GitHubRelease, asset: GitHubAsset | null): string {
+  return (
+    versionFromText(release.tag_name) ??
+    versionFromText(asset?.name) ??
+    versionFromText(release.name) ??
+    release.tag_name
+  )
+}
+
+/** One release for the drawer's patch notes and version picker. */
+export function toProductRelease(
+  release: GitHubRelease,
+  product: CatalogProduct,
+  platform: Platform,
+  baseUrl: string
+): ProductRelease {
+  const pick = selectAsset(release, product, platform)
+  return {
+    tag: release.tag_name,
+    version: releaseVersion(release, pick.asset),
+    name: release.name?.trim() || release.tag_name,
+    publishedAt: release.published_at,
+    prerelease: release.prerelease,
+    url: release.html_url,
+    notes: release.body ? release.body.slice(0, 20_000) : null,
+    asset: pick.asset
+      ? toAssetInfo(product.id, platform, pick.asset, true, baseUrl, release.tag_name)
+      : null,
+    error: pick.error
+  }
+}
+
+/**
+ * Resolves the asset for one specific release, so the version picker can install
+ * an older build through the same download endpoint as the latest one.
+ */
+export async function resolveReleaseAsset(
+  product: CatalogProduct,
+  platform: Platform,
+  tag: string
+): Promise<{
+  release: GitHubRelease | null
+  asset: GitHubAsset | null
+  repo: GitHubRepo | null
+  error: string | null
+}> {
+  const [snapshot, release] = await Promise.all([
+    getRepoSnapshot(product.repo, product.includePrereleases),
+    fetchReleaseByTag(product.repo, tag)
+  ])
+  const pick = selectAsset(release, product, platform)
+  return {
+    release,
+    asset: pick.asset,
+    repo: snapshot.repo,
+    error: pick.error
+  }
+}
+
 export async function resolveProduct(
   product: CatalogProduct,
   platform: Platform,

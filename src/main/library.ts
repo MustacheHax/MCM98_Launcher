@@ -137,6 +137,11 @@ export class LibraryService {
     const info = await stat(appPath).catch(() => null)
     if (!info?.isDirectory()) return null
 
+    const previousDir = join(installPath, '.previous')
+    const previousManifest = existsSync(join(previousDir, 'app'))
+      ? await readManifest(previousDir)
+      : null
+
     return {
       id: manifest.productId,
       name: manifest.name,
@@ -150,7 +155,8 @@ export class LibraryService {
       installPath,
       appPath,
       executablePath,
-      sizeBytes: manifest.sizeBytes
+      sizeBytes: manifest.sizeBytes,
+      previousVersion: previousManifest?.version ?? null
     }
   }
 

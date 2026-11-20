@@ -12,7 +12,8 @@ import type {
   LauncherConfig,
   LauncherUpdateInfo,
   PlayState,
-  ProductEntry
+  ProductEntry,
+  ProductRelease
 } from '@shared/types'
 import { errorMessage, demoMode, getLauncher } from './api'
 import { AppContext, type ToastKind, type View } from './state'
@@ -20,6 +21,7 @@ import {
   activeTaskFor,
   isTerminalPhase,
   isUpdateAvailable,
+  releaseVersionLabel,
   versionFromRelease,
   versionLabel
 } from './utils'
@@ -345,6 +347,53 @@ function App(): JSX.Element {
   const install = useCallback(
     (product: ProductEntry) => startInstall(product, 'install'),
     [startInstall]
+  )
+
+  const installRelease = useCallback(
+    async (product: ProductEntry, release: ProductRelease): Promise<void> => {
+      if (!bridge || !release.asset) return
+      setBusyProductId(product.id)
+      try {
+        await bridge.startInstall({
+          productId: product.id,
+          name: product.name,
+          version: release.version || release.tag,
+          repo: product.repo,
+          releaseUrl: release.url,
+          assetName: release.asset.name,
+          downloadUrl: release.asset.downloadUrl,
+          sizeBytes: release.asset.size,
+          digest: release.asset.digest,
+          executable: product.install?.executable ?? null,
+          args: product.install?.args ?? []
+        })
+        setSelected(null)
+        setView('downloads')
+        toast(`Downloading ${product.name} ${releaseVersionLabel(release)}.`, 'info')
+      } catch (error) {
+        toast(errorMessage(error), 'error')
+      } finally {
+        setBusyProductId(null)
+      }
+    },
+    [bridge, toast]
+  )
+
+  const rollbackProduct = useCallback(
+    async (productId: string): Promise<void> => {
+      if (!bridge) return
+      setBusyProductId(productId)
+      try {
+        await bridge.rollback(productId)
+        await refreshLibrary()
+        toast('Rolled back to the previous version.', 'success')
+      } catch (error) {
+        toast(errorMessage(error), 'error')
+      } finally {
+        setBusyProductId(null)
+      }
+    },
+    [bridge, refreshLibrary, toast]
   )
 
   const repair = useCallback(
@@ -693,7 +742,9 @@ function App(): JSX.Element {
       setTheme,
       openExternal,
       install,
+      installRelease,
       repair,
+      rollbackProduct,
       updateAll,
       updateFor,
       isUpdateSkipped,
@@ -740,7 +791,9 @@ function App(): JSX.Element {
       setTheme,
       openExternal,
       install,
+      installRelease,
       repair,
+      rollbackProduct,
       updateAll,
       updateFor,
       isUpdateSkipped,

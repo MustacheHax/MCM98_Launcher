@@ -1,9 +1,16 @@
 import { existsSync } from 'node:fs'
-import { readdir, stat } from 'node:fs/promises'
-import { basename, dirname, join } from 'node:path'
+import { copyFile, readdir, stat } from 'node:fs/promises'
+import { basename, dirname, join, resolve } from 'node:path'
 import * as tar from 'tar'
-import type { BackupResult, InstalledProduct, SaveInfo } from '@shared/types'
-import { ensureDir, removePath } from './fs-utils'
+import type {
+  BackupResult,
+  InstalledProduct,
+  RestoreSavesResult,
+  SaveBackup,
+  SaveInfo
+} from '@shared/types'
+import { safeArchivePath } from './archive'
+import { ensureDir, isInsideRoot, removePath } from './fs-utils'
 import type { Logger } from './logger'
 
 /** Folder names games and tools commonly use for player data. */
@@ -256,4 +263,143 @@ export async function backupSaves(
   }
 
   return { path: file, bytes: size.size }
+}
+
+/** Backups written for a product, newest first, for the restore picker. */
+export async function listSaveBackups(
+  productId: string,
+  dataRoot: string
+): Promise<SaveBackup[]> {
+  const folder = join(dataRoot, 'backups')
+  const prefix = `${productId}-saves-`
+  let names: string[]
+  try {
+    names = await readdir(folder)
+  } catch {
+    return []
+  }
+
+  const backups: SaveBackup[] = []
+  for (const name of names) {
+    if (!name.startsWith(prefix) || !name.endsWith('.tar.gz')) continue
+    const path = join(folder, name)
+    const info = await stat(path).catch(() => null)
+    if (!info?.isFile()) continue
+    backups.push({
+      path,
+      fileName: name,
+      createdAt: new Date(info.mtimeMs).toISOString(),
+      bytes: info.size
+    })
+  }
+
+  return backups.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+}
+
+async function copyTree(
+  source: string,
+  destination: string
+): Promise<{ files: number; bytes: number }> {
+  let files = 0
+  let bytes = 0
+
+  const visit = async (from: string, to: string): Promise<void> => {
+    await ensureDir(to)
+    const entries = await readdir(from, { withFileTypes: true })
+    for (const entry of entries) {
+      const child = join(from, entry.name)
+      const target = join(to, entry.name)
+      if (entry.isDirectory()) {
+        await visit(child, target)
+      } else if (entry.isFile()) {
+        await copyFile(child, target)
+        files += 1
+        bytes += (await stat(child)).size
+      }
+      // Symlinks and device entries are deliberately ignored: a backup should
+      // never be able to point outside the save folder.
+    }
+  }
+
+  await visit(source, destination)
+  return { files, bytes }
+}
+
+/**
+ * Extracts a saved `.tar.gz` over the product's detected save folder. The
+ * archive is unpacked into a launcher-owned staging folder first, so a damaged
+ * or hostile archive cannot write outside the save folder directly, and the
+ * existing save files are merged over rather than deleted.
+ */
+export async function restoreSaves(
+  product: InstalledProduct,
+  dataRoot: string,
+  backupPath: string,
+  log: Logger,
+  roots: SaveRoot[]
+): Promise<RestoreSavesResult> {
+  const backupsRoot = join(dataRoot, 'backups')
+  const target = resolve(backupPath)
+  const name = basename(target)
+  if (
+    !isInsideRoot(backupsRoot, target) ||
+    target === resolve(backupsRoot) ||
+    !name.startsWith(`${product.id}-saves-`) ||
+    !name.endsWith('.tar.gz')
+  ) {
+    throw new Error('That file is not a save backup for this product.')
+  }
+
+  const info = await stat(target).catch(() => null)
+  if (!info?.isFile()) throw new Error('That save backup no longer exists.')
+
+  const save = await detectSaveDirectory(product, roots)
+  if (!save.path) {
+    throw new Error(
+      'No save folder was detected for this product. Launch it once so it creates one, then restore the backup.'
+    )
+  }
+
+  const staging = join(dataRoot, 'saves-restore', `${product.id}-${Date.now()}`)
+  await ensureDir(staging)
+  let archivedFiles = 0
+
+  try {
+    await tar.x({
+      file: target,
+      cwd: staging,
+      preservePaths: false,
+      strict: true,
+      filter: (entryPath, entry) => {
+        if (!safeArchivePath(entryPath)) {
+          log.warn(`Skipped unsafe save entry: ${entryPath}`)
+          return false
+        }
+        const kind = 'type' in entry ? entry.type : null
+        if (kind !== 'File' && kind !== 'Directory') {
+          log.warn(`Skipped non-file save entry: ${entryPath}`)
+          return false
+        }
+        if (kind === 'File') archivedFiles += 1
+        return true
+      }
+    })
+
+    const topLevel = await readdir(staging, { withFileTypes: true })
+    const folders = topLevel.filter((entry) => entry.isDirectory())
+    if (folders.length !== 1 || topLevel.length !== 1) {
+      throw new Error('This backup does not have the expected save-folder layout.')
+    }
+
+    const source = join(staging, (folders[0] as { name: string }).name)
+    log.info(`Restoring ${product.id} saves from ${name} into ${save.path}.`)
+    const copied = await copyTree(source, save.path)
+    return {
+      path: save.path,
+      files: copied.files > 0 ? copied.files : archivedFiles,
+      bytes: copied.bytes
+    }
+  } finally {
+    await removePath(staging).catch(() => undefined)
+  }
 }

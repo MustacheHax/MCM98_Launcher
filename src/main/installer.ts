@@ -160,6 +160,58 @@ export class InstallManager {
   }
 
   /**
+   * Swaps the one-build rollback snapshot back into place. The installed
+   * version is restored from `.previous/install.json`, so the library and the
+   * next update check see the older version immediately.
+   */
+  async rollback(productId: string): Promise<void> {
+    const id = assertProductId(productId)
+    if (this.hasActiveProduct(id)) {
+      throw new Error('Wait for the current install to finish before rolling back.')
+    }
+    if (this.options.launch.isRunning(id)) {
+      throw new Error('Close the product before rolling back.')
+    }
+
+    const product = await this.options.library.read(id)
+    if (!product) throw new Error('That product is not installed.')
+
+    const previousDir = join(product.installPath, '.previous')
+    const previousApp = join(previousDir, 'app')
+    const previousManifest = await readManifest(previousDir)
+    if (!previousManifest || !existsSync(previousApp)) {
+      throw new Error('No previous version is stored for this product.')
+    }
+
+    const appDir = join(product.installPath, 'app')
+    const displaced = join(product.installPath, `.rollback-${Date.now()}`)
+    try {
+      await rename(appDir, displaced)
+    } catch (error) {
+      throw new Error(swapErrorMessage(error), { cause: error })
+    }
+
+    try {
+      await rename(previousApp, appDir)
+      await writeManifest(product.installPath, previousManifest)
+    } catch (error) {
+      await removePath(appDir).catch(() => undefined)
+      await rename(displaced, appDir).catch(() => undefined)
+      throw new Error(
+        `Could not finish the rollback: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error }
+      )
+    }
+
+    await removePath(displaced).catch((error) => {
+      this.log.warn('Could not remove the rolled-back build.', error)
+    })
+    await removePath(previousDir).catch(() => undefined)
+    this.log.info(`Rolled ${id} back to ${previousManifest.version}.`)
+    this.options.emitLibraryChanged()
+  }
+
+  /**
    * Cleans abandoned staging folders and restores a previous app version if a
    * crash interrupted the swap in the middle of an update.
    */
@@ -198,6 +250,24 @@ export class InstallManager {
         .filter((file) => file.startsWith('.old-'))
         .sort()
         .reverse()
+      const previousDir = join(productDir, '.previous')
+      const previousApp = join(previousDir, 'app')
+
+      // A failed swap can leave the live app folder missing while the rollback
+      // snapshot is intact. Put that build back before considering recovery.
+      if (!existsSync(appDir) && existsSync(previousApp)) {
+        try {
+          await rename(previousApp, appDir)
+          const previousManifest = await readManifest(previousDir)
+          if (previousManifest) await writeManifest(productDir, previousManifest)
+          await removePath(previousDir).catch(() => undefined)
+          this.log.warn(
+            `Recovered the previous files for ${entry.name} after an interrupted update.`
+          )
+        } catch (error) {
+          this.log.error(`Could not recover ${entry.name} after an interrupted update.`, error)
+        }
+      }
 
       if (!existsSync(appDir) && backups.length > 0) {
         const newest = backups.shift() as string
@@ -395,16 +465,20 @@ export class InstallManager {
     manifest: InstallManifest
   ): Promise<void> {
     const appDir = join(productDir, 'app')
-    const backupDir = join(
-      productDir,
-      `.old-${Date.now()}-${manifest.productId.slice(0, 6)}`
-    )
+    const previousDir = join(productDir, '.previous')
     let movedOld = false
     let movedNew = false
 
     try {
       if (existsSync(appDir)) {
-        await rename(appDir, backupDir)
+        // Keep exactly one previous build for a local, offline rollback. The
+        // manifest travels with it so the version shown after a rollback is
+        // the version that actually runs.
+        await removePath(previousDir).catch(() => undefined)
+        await ensureDir(previousDir)
+        const previousManifest = await readManifest(productDir)
+        await rename(appDir, join(previousDir, 'app'))
+        if (previousManifest) await writeManifest(previousDir, previousManifest)
         movedOld = true
       }
       await rename(stagingDir, appDir)
@@ -413,17 +487,17 @@ export class InstallManager {
     } catch (error) {
       try {
         if (movedNew) await removePath(appDir)
-        if (movedOld && !existsSync(appDir)) await rename(backupDir, appDir)
+        if (movedOld && !existsSync(appDir)) {
+          const previousApp = join(previousDir, 'app')
+          if (existsSync(previousApp)) await rename(previousApp, appDir)
+          const previousManifest = await readManifest(previousDir)
+          if (previousManifest) await writeManifest(productDir, previousManifest)
+          await removePath(previousDir).catch(() => undefined)
+        }
       } catch (rollbackError) {
         this.log.error('Could not roll back a failed install swap.', rollbackError)
       }
       throw new Error(swapErrorMessage(error), { cause: error })
-    }
-
-    if (existsSync(backupDir)) {
-      await removePath(backupDir).catch((error) => {
-        this.log.warn('Could not remove the previous version backup.', error)
-      })
     }
   }
 

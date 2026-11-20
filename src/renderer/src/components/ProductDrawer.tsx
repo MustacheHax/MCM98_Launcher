@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import type { SaveInfo } from '@shared/types'
+import { createPortal } from 'react-dom'
+import type { ProductRelease, SaveBackup, SaveInfo } from '@shared/types'
 import { errorMessage, getLauncher } from '../api'
 import { useApp } from '../state'
 import {
@@ -36,12 +37,22 @@ export function ProductDrawer(): JSX.Element | null {
     isUpdateSkipped,
     skipUpdate,
     unskipUpdate,
-    repair
+    repair,
+    installRelease,
+    rollbackProduct
   } = useApp()
   const closeRef = useRef<HTMLButtonElement>(null)
   const bridge = getLauncher()
   const [saves, setSaves] = useState<SaveInfo | null>(null)
   const [savesBusy, setSavesBusy] = useState(false)
+  const [releases, setReleases] = useState<ProductRelease[] | null>(null)
+  const [releasesError, setReleasesError] = useState<string | null>(null)
+  const [pickedTag, setPickedTag] = useState('')
+  const [rollbackArmed, setRollbackArmed] = useState(false)
+  const [restoreOpen, setRestoreOpen] = useState(false)
+  const [backups, setBackups] = useState<SaveBackup[] | null>(null)
+  const [restorePath, setRestorePath] = useState<string | null>(null)
+  const [restoreBusy, setRestoreBusy] = useState(false)
   const selectedId = selected?.id
 
   useEffect(() => {
@@ -75,6 +86,31 @@ export function ProductDrawer(): JSX.Element | null {
     }
   }, [bridge, selectedId])
 
+  // Release history powers both the patch notes and the version picker.
+  useEffect(() => {
+    let alive = true
+    setReleases(null)
+    setReleasesError(null)
+    setPickedTag('')
+    setRollbackArmed(false)
+    setRestoreOpen(false)
+    if (!selectedId) return
+    void bridge
+      .listProductReleases(selectedId)
+      .then((response) => {
+        if (!alive) return
+        setReleases(response.releases)
+        setReleasesError(response.error)
+        setPickedTag(response.releases[0]?.tag ?? '')
+      })
+      .catch((error) => {
+        if (alive) setReleasesError(errorMessage(error))
+      })
+    return () => {
+      alive = false
+    }
+  }, [bridge, selectedId])
+
   if (!selected) return null
 
   const installed = findInstalled(library, selected.id)
@@ -87,6 +123,11 @@ export function ProductDrawer(): JSX.Element | null {
   const indeterminate =
     task?.phase === 'extracting' || task?.phase === 'verifying' || task?.phase === 'finalizing'
   const link = selected.release?.url ?? selected.repoUrl
+  const picked = releases?.find((release) => release.tag === pickedTag) ?? releases?.[0] ?? null
+  const pickedIsInstalled = Boolean(
+    picked && installed && versionLabel(picked.version) === versionLabel(installed.version)
+  )
+  const pickerBusy = Boolean(task) || isRunning || !picked?.asset || pickedIsInstalled
 
   const openLink = async (url: string): Promise<void> => {
     try {
@@ -114,6 +155,40 @@ export function ProductDrawer(): JSX.Element | null {
     } finally {
       setSavesBusy(false)
     }
+  }
+
+  const openRestore = async (): Promise<void> => {
+    setRestoreOpen(true)
+    setRestorePath(null)
+    setBackups(null)
+    try {
+      setBackups(await bridge.listSaveBackups(selected.id))
+    } catch (error) {
+      setBackups([])
+      toast(errorMessage(error), 'error')
+    }
+  }
+
+  const restoreBackup = async (path: string): Promise<void> => {
+    setRestoreBusy(true)
+    try {
+      const result = await bridge.restoreSaves(selected.id, path)
+      toast(
+        `Restored ${result.files} save file${result.files === 1 ? '' : 's'} (${formatBytes(result.bytes)}).`,
+        'success'
+      )
+      setRestoreOpen(false)
+      setRestorePath(null)
+    } catch (error) {
+      toast(errorMessage(error), 'error')
+    } finally {
+      setRestoreBusy(false)
+    }
+  }
+
+  const doRollback = async (): Promise<void> => {
+    setRollbackArmed(false)
+    await rollbackProduct(selected.id)
   }
 
   const statusLabel = isRunning
@@ -249,10 +324,7 @@ export function ProductDrawer(): JSX.Element | null {
                     {repairing ? 'Repairing…' : 'Repair install'}
                   </button>
                 )}
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => void openFolder(installed.id)}
-                >
+                <button className="btn btn-ghost" onClick={() => void openFolder(installed.id)}>
                   <Icon name="folder" size={15} />
                   Open folder
                 </button>
@@ -312,12 +384,91 @@ export function ProductDrawer(): JSX.Element | null {
                 </div>
               )}
 
+              {releases && releases.length > 0 && (
+                <div className="version-picker">
+                  <label>
+                    <span>Install a version</span>
+                    <select
+                      value={pickedTag}
+                      onChange={(event) => setPickedTag(event.target.value)}
+                      aria-label="Choose a release version"
+                    >
+                      {releases.map((release, index) => (
+                        <option key={release.tag} value={release.tag}>
+                          {releaseVersionLabel(release)}
+                          {index === 0 ? ' · latest' : ''}
+                          {installed && versionLabel(release.version) === versionLabel(installed.version)
+                            ? ' · installed'
+                            : ''}
+                          {release.asset ? '' : ' · no build'}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={() => picked && void installRelease(selected, picked)}
+                    disabled={pickerBusy}
+                    title={
+                      picked?.asset
+                        ? `Download and install ${releaseVersionLabel(picked)}`
+                        : 'This release has no build for your platform'
+                    }
+                  >
+                    <Icon name="download" size={13} />
+                    {pickedIsInstalled
+                      ? 'Installed'
+                      : picked
+                        ? `Install ${releaseVersionLabel(picked)}`
+                        : 'Install'}
+                  </button>
+                </div>
+              )}
+
+              {installed.previousVersion && (
+                <div className="rollback-row">
+                  <span className="installed-meta">
+                    Previous build kept:{' '}
+                    <span className="mono">{versionLabel(installed.previousVersion)}</span>
+                  </span>
+                  {rollbackArmed ? (
+                    <span className="inline-confirm">
+                      <button
+                        className="btn btn-outline btn-sm"
+                        onClick={() => void doRollback()}
+                        disabled={Boolean(task) || isRunning}
+                      >
+                        <Icon name="refresh" size={12} />
+                        Confirm rollback
+                      </button>
+                      <button className="text-button" onClick={() => setRollbackArmed(false)}>
+                        Cancel
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => setRollbackArmed(true)}
+                      disabled={Boolean(task) || isRunning}
+                      title={
+                        isRunning
+                          ? 'Close the product before rolling back'
+                          : 'Switch back to the build this update replaced'
+                      }
+                    >
+                      <Icon name="refresh" size={12} />
+                      Roll back
+                    </button>
+                  )}
+                </div>
+              )}
+
               <div className="save-row">
                 <button
                   className="text-button"
                   onClick={() => void openSaves()}
                   disabled={savesBusy}
-                  title={saves?.path ?? 'Look for this product\'s save folder'}
+                  title={saves?.path ?? "Look for this product's save folder"}
                 >
                   <Icon name="folder" size={13} />
                   {saves?.path ? 'Open saves' : 'Find saves'}
@@ -330,6 +481,15 @@ export function ProductDrawer(): JSX.Element | null {
                 >
                   <Icon name="download" size={13} />
                   {savesBusy ? 'Backing up…' : 'Back up saves'}
+                </button>
+                <button
+                  className="text-button"
+                  onClick={() => void openRestore()}
+                  disabled={savesBusy || Boolean(task) || isRunning}
+                  title="Restore a save archive written by this launcher"
+                >
+                  <Icon name="refresh" size={13} />
+                  Restore backup
                 </button>
               </div>
 
@@ -344,9 +504,9 @@ export function ProductDrawer(): JSX.Element | null {
               <div>
                 <h3>Release notes</h3>
                 <p>
-                  {selected.release
-                    ? `${releaseVersionLabel(selected.release)} · ${formatDate(selected.release.publishedAt)}`
-                    : 'Nothing published yet'}
+                  {releases && releases.length > 0
+                    ? `${releases.length} releases · ${releaseVersionLabel(releases[0] as ProductRelease)} is newest`
+                    : 'Newest release first'}
                 </p>
               </div>
               <button className="text-button" onClick={() => void openLink(link)}>
@@ -354,11 +514,65 @@ export function ProductDrawer(): JSX.Element | null {
                 <Icon name="external" size={13} />
               </button>
             </div>
-            <div className="notes">
-              {selected.release?.notes?.trim()
-                ? selected.release.notes
-                : selected.error ?? 'No release notes were published for this release.'}
-            </div>
+
+            {releases === null && !releasesError && (
+              <p className="notes-loading">Loading release history…</p>
+            )}
+
+            {releases && releases.length > 0 ? (
+              <div className="release-list">
+                {releases.map((release, index) => (
+                  <details className="release-entry" key={release.tag} open={index === 0}>
+                    <summary>
+                      <span className="release-version mono">
+                        {releaseVersionLabel(release)}
+                      </span>
+                      {index === 0 && <span className="chip chip-accent">Newest</span>}
+                      {release.prerelease && <span className="chip">Prerelease</span>}
+                      <span className="release-date">{formatDate(release.publishedAt)}</span>
+                    </summary>
+                    <div className="release-body">
+                      <div className="notes">
+                        {release.notes?.trim() ||
+                          'No release notes were published for this release.'}
+                      </div>
+                      <div className="release-actions">
+                        {release.asset && (
+                          <button
+                            className="btn btn-outline btn-sm"
+                            onClick={() => void installRelease(selected, release)}
+                            disabled={
+                              Boolean(task) ||
+                              isRunning ||
+                              (installed
+                                ? versionLabel(release.version) === versionLabel(installed.version)
+                                : false)
+                            }
+                          >
+                            <Icon name="download" size={13} />
+                            Install {releaseVersionLabel(release)}
+                          </button>
+                        )}
+                        {!release.asset && release.error && (
+                          <span className="release-unavailable">{release.error}</span>
+                        )}
+                        <button className="text-button" onClick={() => void openLink(release.url)}>
+                          View on GitHub
+                          <Icon name="external" size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  </details>
+                ))}
+              </div>
+            ) : (
+              <div className="notes">
+                {selected.release?.notes?.trim() ||
+                  releasesError ||
+                  selected.error ||
+                  'No release notes were published for this release.'}
+              </div>
+            )}
           </section>
 
           <div className="availability">
@@ -390,6 +604,88 @@ export function ProductDrawer(): JSX.Element | null {
             </span>
           </div>
         </div>
+
+        {restoreOpen &&
+          createPortal(
+          <div
+            className="modal-scrim"
+            role="presentation"
+            onClick={() => !restoreBusy && setRestoreOpen(false)}
+          >
+            <div
+              className="confirm-modal save-restore-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="restore-title"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <h2 id="restore-title">Restore saves</h2>
+              <p>
+                Choose a backup for <strong>{selected.name}</strong>. Files in
+                {saves?.path ? ` ${saves.path}` : ' the detected save folder'} are overwritten.
+                Other files are kept.
+              </p>
+
+              {backups === null ? (
+                <p className="notes-loading">Looking for backups…</p>
+              ) : backups.length === 0 ? (
+                <p className="settings-note">
+                  No save backups exist for this product. Use <strong>Back up saves</strong> first.
+                </p>
+              ) : (
+                <ul className="backup-list">
+                  {backups.map((backup) => (
+                    <li key={backup.path}>
+                      <div className="backup-copy">
+                        <strong>{formatDate(backup.createdAt)}</strong>
+                        <span>
+                          {formatBytes(backup.bytes)} · <span className="mono">{backup.fileName}</span>
+                        </span>
+                      </div>
+                      {restorePath === backup.path ? (
+                        <span className="inline-confirm">
+                          <button
+                            className="btn btn-primary btn-sm"
+                            onClick={() => void restoreBackup(backup.path)}
+                            disabled={restoreBusy}
+                          >
+                            {restoreBusy ? 'Restoring…' : 'Overwrite saves'}
+                          </button>
+                          <button
+                            className="text-button"
+                            onClick={() => setRestorePath(null)}
+                            disabled={restoreBusy}
+                          >
+                            Cancel
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          className="btn btn-outline btn-sm"
+                          onClick={() => setRestorePath(backup.path)}
+                          disabled={restoreBusy}
+                        >
+                          Restore
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <div className="confirm-actions">
+                <button
+                  className="btn"
+                  onClick={() => setRestoreOpen(false)}
+                  disabled={restoreBusy}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
       </aside>
     </div>
   )

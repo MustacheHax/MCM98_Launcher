@@ -15,7 +15,8 @@ GitHub Releases ──► Render relay ──► Electron launcher ──► loc
 - **Desktop launcher** — Electron + React + TypeScript, twenty-two complete appearance themes across eleven families, generated cover art, install/update/play/uninstall flows, download queue, settings, logs.
 - **Library tools** — search, sort by name / recently played / size, an updates-only filter, **Update all**, per-product **Skip this version**, and **Repair install** when the recorded executable is missing.
 - **Play history** — last played, total playtime, and launch counts per product. Running sessions survive a launcher restart, so updates and uninstalls stay blocked while a game is open even after relaunching the launcher.
-- **Saves** — each install exposes its detected save folder and can archive it to `backups/` as a `.tar.gz` in one click. Detection ranks an exact product-named folder in a user-data location above a save folder inside the install, and also looks one level deeper for publisher/studio nesting such as `%LOCALAPPDATA%\<Studio>\<Game>` and Unity's `LocalLow`.
+- **Release history and version picker** — the product drawer lists the latest releases with their notes, expands the newest, and can install any earlier build through the relay. The build replaced by an update is kept locally, so **Roll back** restores it without downloading.
+- **Saves** — each install exposes its detected save folder, archives it to `backups/` as a `.tar.gz` in one click, and restores any of those backups over the detected folder after a confirmation. Detection ranks an exact product-named folder in a user-data location above a save folder inside the install, and also looks one level deeper for publisher/studio nesting such as `%LOCALAPPDATA%\<Studio>\<Game>` and Unity's `LocalLow`.
 - **Resumable downloads** — an interrupted transfer continues from its partial file using HTTP range requests, including assets streamed through the relay. Cancelled transfers keep the partial for the next attempt, and **Discard partial** frees it.
 - **Automatic relay** — the launcher dials the relay baked in at build time (hosted by default, local in development) and replaces a stored address from an older build, so there is no connection setup to get wrong. The address is reported read-only in **Settings → About**.
 - **Offline catalog cache** — when the relay is asleep, the library still shows the last resolved catalog and flags it as cached.
@@ -272,6 +273,8 @@ GitHub's unauthenticated API limit is 60 requests/hour per IP, which a catalog r
 | --- | --- |
 | `GET /api/health` | Service version, catalog size, and whether a GitHub token is configured. |
 | `GET /api/catalog?platform=win32` | Resolved catalog for `win32`, `linux`, or `darwin`. |
+| `GET /api/releases/:productId?platform=win32` | Recent releases with notes, versions, and a per-release download asset. |
+| `GET /api/download/:productId/:tag?platform=win32` | Streams one specific release's asset, or redirects to GitHub for public assets. |
 | `GET /api/launcher?platform=win32` | Newest stable launcher release, matching installer asset, download URL, and digest. |
 | `GET /api/launcher/download?platform=win32` | Streams the launcher installer through the relay, or redirects to GitHub for public assets. |
 | `GET /api/download/:productId?platform=win32` | Streams a private asset through the relay, or redirects to GitHub for public assets. Honours `Range` so the launcher can resume. |
@@ -348,12 +351,11 @@ On startup the launcher repairs interrupted updates, restores a previous `app/` 
 - No delta updates, parallel chunking, or bandwidth limits. Downloads resume, but only from a single connection.
 - No 7z, DMG, or MSI installation. Supported formats are archives, portable Windows `.exe`, and Linux `.AppImage`.
 - No code signing on Windows or notarization on macOS. Users may see SmartScreen/Gatekeeper warnings; production distribution needs signing.
-- Save-folder detection is heuristic: it looks inside the install first, then for a folder named after the product in the platform's user-data locations. Products that store saves somewhere unusual need **Open folder** to inspect manually, and there is no restore-from-backup action yet.
+- Save-folder detection is heuristic: it looks inside the install first, then for a folder named after the product in the platform's user-data locations. Products that store saves somewhere unusual need **Open folder** to inspect manually.
 - The relay cache is in memory and resets on redeploy.
 - No per-release arch metadata; use explicit asset globs.
-- Rollback is crash-recovery only, not a user-facing version picker.
 
-The next releases are scoped and versioned in [ROADMAP.md](ROADMAP.md): `0.4.1` fixes save detection, corrupt-install repair, and download cleanup; `0.5.0` adds save restore, patch notes, and a version picker; `0.7.0` brings profiles and relay access control; `1.0.0` is the signing and schema-stability gate.
+The next releases are scoped and versioned in [ROADMAP.md](ROADMAP.md): `0.5.0` adds save restore, patch notes, and a version picker with rollback; `0.6.0` adds library export, chunked downloads, and portable mode; `0.7.0` brings profiles and relay access control; `1.0.0` is the signing and schema-stability gate.
 
 ## Scripts
 

@@ -22,9 +22,15 @@ export const IPC = {
   getRunning: 'launch:running',
   getPlayState: 'launch:play-state',
 
+  listProductReleases: 'products:releases',
+
   getSaveInfo: 'saves:info',
   openSaveFolder: 'saves:open',
   backupSaves: 'saves:backup',
+  listSaveBackups: 'saves:list-backups',
+  restoreSaves: 'saves:restore',
+
+  rollback: 'install:rollback',
 
   openPath: 'shell:open-path',
   openExternal: 'shell:open-external',

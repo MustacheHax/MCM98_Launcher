@@ -3999,6 +3999,187 @@ html[data-motion="reduced"] .progress.indeterminate > span {
   gap: 5px;
 }
 
+.version-picker {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+
+.version-picker label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 170px;
+}
+
+.version-picker label > span {
+  color: var(--dim);
+  font-size: calc(8.8px * var(--text-scale));
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.version-picker select {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: calc(11px * var(--text-scale));
+}
+
+.rollback-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 9px;
+}
+
+.inline-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.release-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.release-entry {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.release-entry summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.release-entry summary::-webkit-details-marker {
+  display: none;
+}
+
+.release-entry summary::after {
+  content: '+';
+  margin-left: 8px;
+  color: var(--dim);
+  font-family: var(--font-mono);
+  font-size: calc(12px * var(--text-scale));
+}
+
+.release-entry[open] summary::after {
+  content: '\2212';
+}
+
+.release-version {
+  font-size: calc(11.2px * var(--text-scale));
+  font-weight: 700;
+}
+
+.release-date {
+  margin-left: auto;
+  color: var(--dim);
+  font-size: calc(9.4px * var(--text-scale));
+}
+
+.release-body {
+  padding: 0 12px 12px;
+}
+
+.release-entry .notes {
+  max-height: 200px;
+  margin-top: 6px;
+  padding: 10px 11px;
+  font-size: calc(10.8px * var(--text-scale));
+}
+
+.release-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 9px;
+}
+
+.release-actions .text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.release-unavailable {
+  color: var(--dim);
+  font-size: calc(9.6px * var(--text-scale));
+}
+
+.notes-loading {
+  margin-top: 10px;
+  color: var(--dim);
+  font-size: calc(10.5px * var(--text-scale));
+}
+
+.backup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  margin: 12px 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.backup-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+}
+
+.backup-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.backup-copy strong {
+  font-size: calc(11px * var(--text-scale));
+}
+
+.backup-copy span {
+  overflow-wrap: anywhere;
+  color: var(--dim);
+  font-size: calc(9.2px * var(--text-scale));
+}
+
+.save-restore-modal {
+  width: min(540px, 94vw);
+}
+
 /* ------------------------------------------------------------------ */
 /* Settings: skipped versions                                          */
 /* ------------------------------------------------------------------ */

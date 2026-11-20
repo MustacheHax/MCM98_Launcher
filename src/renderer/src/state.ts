@@ -8,7 +8,8 @@ import type {
   LauncherConfig,
   LauncherUpdateInfo,
   PlayState,
-  ProductEntry
+  ProductEntry,
+  ProductRelease
 } from '@shared/types'
 
 export type View = 'library' | 'catalog' | 'downloads' | 'settings'
@@ -49,7 +50,11 @@ export interface AppContextValue {
   setTheme: (theme: ThemeId) => Promise<void>
   openExternal: (url: string) => Promise<void>
   install: (product: ProductEntry) => Promise<void>
+  /** Installs one specific release, for the version picker. */
+  installRelease: (product: ProductEntry, release: ProductRelease) => Promise<void>
   repair: (product: ProductEntry) => Promise<void>
+  /** Restores the one-build rollback snapshot kept beside the install. */
+  rollbackProduct: (productId: string) => Promise<void>
   updateAll: () => Promise<void>
   /** Comparable version of an available update, or null when there is none. */
   updateFor: (product: ProductEntry) => string | null

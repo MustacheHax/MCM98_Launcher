@@ -109,5 +109,13 @@ export function isUpdateAvailable(
   latestVersion: string | null | undefined
 ): boolean {
   if (!latestVersion) return false
+  // A release whose tag, asset, and title carry no version cannot be ordered
+  // against anything. The lexical fallback would also let a rolling tag such as
+  // "main-brain" look newer than every numbered release.
+  if (!isVersionLike(latestVersion)) return false
+  // Builds installed by an older launcher stored the raw release tag
+  // ("main-brain", "prerelease") instead of a version. A numbered release is
+  // an update over one of those; skipping it would strand the install forever.
+  if (!isVersionLike(installedVersion)) return true
   return compareVersions(latestVersion, installedVersion) > 0
 }

@@ -12,6 +12,9 @@ import type {
   LauncherConfig,
   LauncherUpdateInfo,
   PlayState,
+  ProductReleasesResponse,
+  RestoreSavesResult,
+  SaveBackup,
   SaveInfo
 } from '@shared/types'
 
@@ -39,8 +42,12 @@ const api: LauncherApi = {
     ipcRenderer.invoke(IPC.checkLauncherUpdate) as Promise<LauncherUpdateInfo>,
   downloadLauncherUpdate: () =>
     ipcRenderer.invoke(IPC.downloadLauncherUpdate) as Promise<LauncherUpdateInfo>,
-  installLauncherUpdate: () =>
+    installLauncherUpdate: () =>
     ipcRenderer.invoke(IPC.installLauncherUpdate) as Promise<void>,
+
+  listProductReleases: (productId) =>
+    ipcRenderer.invoke(IPC.listProductReleases, productId) as Promise<ProductReleasesResponse>
+,
 
   listLibrary: () => ipcRenderer.invoke(IPC.listLibrary) as Promise<InstalledProduct[]>,
   startInstall: (request: InstallRequest) =>
@@ -50,6 +57,7 @@ const api: LauncherApi = {
   clearFinishedTasks: () => ipcRenderer.invoke(IPC.clearFinishedTasks) as Promise<void>,
   discardPartials: (productId) =>
     ipcRenderer.invoke(IPC.discardPartials, productId) as Promise<void>,
+  rollback: (productId) => ipcRenderer.invoke(IPC.rollback, productId) as Promise<void>,
   uninstall: (productId) => ipcRenderer.invoke(IPC.uninstall, productId) as Promise<void>,
 
   launch: (productId) =>
@@ -63,6 +71,14 @@ const api: LauncherApi = {
     ipcRenderer.invoke(IPC.openSaveFolder, productId) as Promise<void>,
   backupSaves: (productId) =>
     ipcRenderer.invoke(IPC.backupSaves, productId) as Promise<BackupResult>,
+  listSaveBackups: (productId) =>
+    ipcRenderer.invoke(IPC.listSaveBackups, productId) as Promise<SaveBackup[]>,
+  restoreSaves: (productId, backupPath) =>
+    ipcRenderer.invoke(
+      IPC.restoreSaves,
+      productId,
+      backupPath
+    ) as Promise<RestoreSavesResult>,
 
   openPath: (target, productId) =>
     ipcRenderer.invoke(IPC.openPath, target, productId) as Promise<void>,
