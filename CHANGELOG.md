@@ -8,6 +8,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 Planned work and the version each item ships under live in [ROADMAP.md](ROADMAP.md).
 
+## [0.4.8] — 2026-11-20
+
+Shipped under a patch number so 0.4.7 installs receive it as an update. The three features below were scoped for 0.5.0; none of them changes the config, `install.json`, or `play-state.json` format, so a 0.4.x install upgrades in place.
+
+### Added
+
+- **Restore a save backup.** Every archive in `<userData>/backups` now lists in the product drawer with its date and size. Restoring extracts it over the detected save folder after an inline confirmation, using the same staged extraction and path-traversal guards as installs; the row is blocked while the product is running or installing.
+- **Patch notes per product.** The drawer lists a product's ten newest published releases with their real notes, version, date, prerelease mark and asset size, newest expanded. It falls back to the catalog's notes when the relay predates the new endpoint.
+- **Version picker and rollback.** A version menu installs any published release through a new tag route on the relay, and the installer now keeps the build it replaced in `.previous` instead of deleting it. **Roll back** in the drawer swaps it back after an inline confirm; `install.json` records `previousVersion`, and crash recovery treats `.previous` like a second `app/`.
+- `npm test` grew to nineteen checks: five for update detection and two for save backup listing and restore.
+
+### Fixed
+
+- **A release with no comparable version was offered as an update.** `isUpdateAvailable()` now requires a comparable release version, while an unversioned install (a dev build such as `main-brain`) still accepts a numbered release. Previously the check could promise an update that the installer then refused.
+
 ## [0.4.7] — 2026-11-03
 
 ### Added
@@ -104,7 +119,8 @@ The largest release so far: the launcher gained persistence, resume, and library
 
 Releases before 0.3.0 predate this changelog. In short: 0.2.0 brought self-installation and the relay-backed catalog, and 0.1.0 was the first release with catalog listing, install, launch, and uninstall.
 
-[Unreleased]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.7...HEAD
+[Unreleased]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.8...HEAD
+[0.4.8]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.7...v0.4.8
 [0.4.7]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.5...v0.4.7
 [0.4.5]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.0...v0.4.5
 [0.4.0]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.3.4...v0.4.0

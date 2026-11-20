@@ -201,9 +201,9 @@ The launcher checks its own repository for stable GitHub Releases. By default th
 
 The app compares the release version with its own and only prompts when the release is newer. Semantic versions are read from the tag first, then from the asset name and release title, so a rolling tag such as `newest` still resolves to a comparable version. **Update now** downloads the build through the relay, verifies GitHub's digest when present, and hands off to a small detached helper. The helper waits for the launcher to exit, runs the NSIS installer (or copies a portable zip / AppImage / archive into place), and relaunches the launcher. On macOS, the downloaded DMG or zip is opened in Finder and the user finishes the drag-install. The published release must not be a prerelease or draft.
 
-The current app version is `0.4.7`. If the newest release has no comparable version at all, Settings explains that instead of offering a bogus update.
+The current app version is `0.4.8`. If the newest release has no comparable version at all, Settings explains that instead of offering a bogus update.
 
-Self-installation arrived in 0.2.0. Install 0.2.0 or newer manually once (run `release/MCM98 Launcher-0.4.7-win-x64.exe` after attaching it to the release); every later version can then update from inside the running launcher. A 0.1.0 build can only detect the release and open GitHub.
+Self-installation arrived in 0.2.0. Install 0.2.0 or newer manually once (run `release/MCM98 Launcher-0.4.8-win-x64.exe` after attaching it to the release); every later version can then update from inside the running launcher. A 0.1.0 build can only detect the release and open GitHub.
 
 ### Versioning and roadmap
 
@@ -355,7 +355,7 @@ On startup the launcher repairs interrupted updates, restores a previous `app/` 
 - The relay cache is in memory and resets on redeploy.
 - No per-release arch metadata; use explicit asset globs.
 
-The next releases are scoped and versioned in [ROADMAP.md](ROADMAP.md): `0.5.0` adds save restore, patch notes, and a version picker with rollback; `0.6.0` adds library export, chunked downloads, and portable mode; `0.7.0` brings profiles and relay access control; `1.0.0` is the signing and schema-stability gate.
+The next releases are scoped and versioned in [ROADMAP.md](ROADMAP.md): `0.4.8` adds save restore, patch notes, and a version picker with rollback; `0.5.0` adds favourites and manual order; `0.6.0` adds library export, chunked downloads, and portable mode; `0.7.0` brings profiles and relay access control; `1.0.0` is the signing and schema-stability gate.
 
 ## Scripts
 

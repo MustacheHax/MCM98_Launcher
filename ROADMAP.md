@@ -2,7 +2,7 @@
 
 Planned releases for the MCM98 Launcher and its relay, and the version each kind of change ships under. Shipped work is recorded in [CHANGELOG.md](CHANGELOG.md); this file is intent, not a promise, and it is re-ordered as priorities change.
 
-Current release: **0.4.7**.
+Current release: **0.4.8**.
 
 ## How versions are chosen
 
@@ -42,13 +42,19 @@ Deferred from this list: a repeatable `npm test` suite, shipped in 0.4.7.
 - **Repeatable tests.** `npm test` now runs twelve checks over the downloader, the play-state store, and save detection. The relay range check stays manual because it needs a live GitHub asset.
 - **Polish:** no leftover connection-tab surface needed changing — the status chip, About panel, and catalog error copy were already clean.
 
-## 0.5.0 — saves, notes, and versions
+## 0.4.8 — shipped 2026-11-20
 
-Minor. Ships release notes; migrates nothing in the config except an optional `favourites` list.
+Shipped under a patch number so the 0.4.7 install base receives it as an update. These three features were scoped for 0.5.0 and none of them changes a config, `install.json`, or `play-state.json` format, so a 0.4.x install upgrades silently.
 
 - **Restore a save backup.** Pick a `.tar.gz` from `<userData>/backups`, confirm the overwrite, extract it back into the detected save folder with the same path-traversal guards used for installs. Closes the gap called out in the README limitations.
-- **Patch notes per product.** The relay already returns release notes and metadata; show them in the drawer instead of only linking to GitHub, with the newest entry expanded.
-- **Version picker and rollback.** Let the user install an earlier release of a product (the relay can list releases), and keep one previous `app/` folder for a one-click local rollback. Replaces the current "crash recovery only" behaviour.
+- **Patch notes per product.** The relay returns the ten newest published releases per product; the drawer shows their notes, version, date and asset instead of only linking to GitHub, with the newest entry expanded.
+- **Version picker and rollback.** Install any published release of a product through a relay tag route, and keep one previous `app/` folder for a one-click local rollback. Replaces the current "crash recovery only" behaviour.
+- **Update detection corrected.** A release without a comparable version no longer counts as an update, while an unversioned dev build still accepts a numbered release.
+
+## 0.5.0 — favourites and manual order
+
+Minor. Migrates nothing in the config except an optional `favourites` list.
+
 - **Favourites and manual order.** Pin products to the top of the library and drag to reorder, stored per user.
 
 ## 0.6.0 — portability and transfer control
