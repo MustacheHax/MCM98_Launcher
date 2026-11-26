@@ -1,6 +1,6 @@
 # MCM98 Launcher
 
-A Windows/macOS/Linux desktop launcher and updater for MCM98 games and applications. It lists the repositories you choose, resolves their newest GitHub Releases through a small relay on Render, downloads the right build for the user's platform, verifies it, installs it into a local library, and launches it.
+A Windows/macOS/Linux desktop launcher and updater for MCM98 games and applications. It lists released repositories from your GitHub account (or a hand-written catalog), resolves their newest GitHub Releases through a small relay on Render, downloads the right build for the user's platform, verifies it, installs it into a local library, and launches it.
 
 This first version is intentionally account-free: no Entra/SSO, profiles, entitlements, or game keys. It is a launcher and product updater, not a storefront yet.
 
@@ -21,7 +21,8 @@ GitHub Releases ──► Render relay ──► Electron launcher ──► loc
 - **Automatic relay** — the launcher dials the relay baked in at build time (hosted by default, local in development) and replaces a stored address from an older build, so there is no connection setup to get wrong. The address is reported read-only in **Settings → About**.
 - **Offline catalog cache** — when the relay is asleep, the library still shows the last resolved catalog and flags it as cached.
 - **Command palette** — `Ctrl/Cmd + K` jumps to any view, product, or maintenance action; `Ctrl/Cmd + 1-4` switches views.
-- **Relay** — Express + TypeScript API suitable for Render. It reads a developer-owned catalog, resolves GitHub releases server-side, caches responses, and streams private release assets without exposing a GitHub token.
+- **Relay** — Express + TypeScript API suitable for Render. It resolves GitHub releases server-side, caches responses, and streams private release assets without exposing a GitHub token.
+- **Automatic catalog discovery** — every repository under `CATALOG_OWNERS` (the launcher's own account by default) that has a published release with a supported build appears in the catalog without a catalog edit. Hand-written `server/catalog.json` entries override the discovered name, summary, tags, and platform rules.
 - **In-app launcher updates** — the relay resolves the launcher's own GitHub releases; the app downloads the installer through the relay, verifies its digest, replaces itself after quitting, and relaunches. **Release notes** remains available in Settings as a fallback.
 - **Shared contract** — one set of API/IPC types consumed by both sides.
 - **Render Blueprint** — `render.yaml` provisions the web service.
@@ -49,10 +50,10 @@ The launcher **installs prebuilt release artifacts**. It does not run a compiler
 │  │  └─ library.ts     installed-product manifests
 │  ├─ preload/          typed contextBridge API
 │  └─ renderer/         React UI (+ browser demo bridge)
-├─ test/                npm test: downloader, play state, save detection
+├─ test/                npm test: downloader, play state, saves, discovery, cache fallback
 ├─ server/              Render relay service
 │  ├─ src/              Express app, GitHub resolver, cache
-│  ├─ catalog.json      selected repositories (edit this)
+│  ├─ catalog.json      optional overrides (ships empty; discovery is the source)
 │  └─ catalog.example.json
 ├─ shared/              API and desktop type contracts
 ├─ CHANGELOG.md         what shipped in each released version
@@ -70,13 +71,7 @@ npm install
 npm --prefix server install
 ```
 
-Create a catalog with at least one repository:
-
-```bash
-cp server/catalog.example.json server/catalog.json
-```
-
-Edit `server/catalog.json` for your repositories, then run the relay and launcher in separate terminals:
+Released repositories are discovered automatically from `CATALOG_OWNERS` (by default the owner of `LAUNCHER_REPO`). `server/catalog.json` ships empty; add an entry only to pin a display name, summary, or asset rule. `server/catalog.example.json` shows the format. Set `CATALOG_OWNERS` as needed (`none` turns discovery off), then run the relay and launcher in separate terminals:
 
 ```bash
 npm --prefix server run dev
@@ -129,7 +124,7 @@ The same tab sets **text size** (Small, Default, Large, Extra large). It scales 
    - `HollowSignal-linux-x86_64.tar.gz`
    - `HollowSignal-macos-universal.zip`
    - `HollowSignal-portable.exe`
-5. **Add the product to the relay catalog** and redeploy the relay.
+5. **Catalog it.** A repository under `CATALOG_OWNERS` is discovered automatically; for any other repository, add it to `server/catalog.json` and redeploy the relay.
 6. In the launcher, refresh the catalog. Users can install or update from there.
 
 ### Catalog entry
@@ -201,9 +196,9 @@ The launcher checks its own repository for stable GitHub Releases. By default th
 
 The app compares the release version with its own and only prompts when the release is newer. Semantic versions are read from the tag first, then from the asset name and release title, so a rolling tag such as `newest` still resolves to a comparable version. **Update now** downloads the build through the relay, verifies GitHub's digest when present, and hands off to a small detached helper. The helper waits for the launcher to exit, runs the NSIS installer (or copies a portable zip / AppImage / archive into place), and relaunches the launcher. On macOS, the downloaded DMG or zip is opened in Finder and the user finishes the drag-install. The published release must not be a prerelease or draft.
 
-The current app version is `0.4.8`. If the newest release has no comparable version at all, Settings explains that instead of offering a bogus update.
+The current app version is `0.4.9`. If the newest release has no comparable version at all, Settings explains that instead of offering a bogus update.
 
-Self-installation arrived in 0.2.0. Install 0.2.0 or newer manually once (run `release/MCM98 Launcher-0.4.8-win-x64.exe` after attaching it to the release); every later version can then update from inside the running launcher. A 0.1.0 build can only detect the release and open GitHub.
+Self-installation arrived in 0.2.0. Install 0.2.0 or newer manually once (run `release/MCM98 Launcher-0.4.9-win-x64.exe` after attaching it to the release); every later version can then update from inside the running launcher. A 0.1.0 build can only detect the release and open GitHub.
 
 ### Versioning and roadmap
 
@@ -244,6 +239,8 @@ The relay needs a **personal access token** that can read the repository. The si
 5. In Render, open the relay service → **Environment**, set `GITHUB_TOKEN` to exactly that value, and save. The value must not include quotes, `Bearer`, or line breaks.
 6. Redeploy the relay and refresh the launcher.
 
+Auto-discovery uses `GET /user/repos`, which only returns repositories the token can read. When you create a new private repository, add it to the token's **Repository access** as well; otherwise the relay cannot list it or download its assets. A classic token with `repo` scope sees every repository, including ones created later.
+
 Do **not** put any of these in `GITHUB_TOKEN`:
 
 - A GitHub App **private key** (the `-----BEGIN … PRIVATE KEY-----` block, or its base64 body starting with `MII`).
@@ -259,6 +256,7 @@ A GitHub App **installation access token** (`ghs_…`) also works with the relay
 | `GITHUB_TOKEN` | unset | GitHub API token. Strongly recommended. Required for private repositories. Use a fine-grained personal access token with read-only Contents access. Never use a GitHub App private key or JWT. |
 | `LAUNCHER_REPO` | `MustacheHax/MCM98_Launcher` | Repository whose stable GitHub Releases are checked for launcher updates. |
 | `CATALOG_PATH` | `server/catalog.json` | Alternate catalog file path. |
+| `CATALOG_OWNERS` | owner of `LAUNCHER_REPO` | Comma-separated GitHub accounts whose released repositories are added automatically. Set to `none` to catalog only the hand-written entries. |
 | `PUBLIC_BASE_URL` | request origin | Public relay base used to build private-asset download URLs. Set this when behind a custom domain/proxy. |
 | `CACHE_TTL_SECONDS` | `300` | How long resolved GitHub releases stay cached in memory. |
 | `PORT` | `8790` | HTTP port. Render sets this automatically. |
@@ -272,7 +270,7 @@ GitHub's unauthenticated API limit is 60 requests/hour per IP, which a catalog r
 | Endpoint | Description |
 | --- | --- |
 | `GET /api/health` | Service version, catalog size, and whether a GitHub token is configured. |
-| `GET /api/catalog?platform=win32` | Resolved catalog for `win32`, `linux`, or `darwin`. |
+| `GET /api/catalog?platform=win32` | Resolved catalog for `win32`, `linux`, or `darwin`. Returns `502` when discovery cannot refresh, so the launcher keeps its last-known catalog. |
 | `GET /api/releases/:productId?platform=win32` | Recent releases with notes, versions, and a per-release download asset. |
 | `GET /api/download/:productId/:tag?platform=win32` | Streams one specific release's asset, or redirects to GitHub for public assets. |
 | `GET /api/launcher?platform=win32` | Newest stable launcher release, matching installer asset, download URL, and digest. |
@@ -287,7 +285,7 @@ Render's free tier sleeps. The desktop client retries the catalog request and ex
 
 ```bash
 npm run typecheck     # main/preload + renderer + tests
-npm test              # downloader, play-state, and save-detection checks
+npm test              # downloader, play-state, save, discovery, and cache-fallback checks
 npm run build         # typecheck, then electron-vite production bundle
 npm run dist:win      # NSIS installer + portable zip
 npm run dist:mac      # DMG + zip
@@ -338,7 +336,7 @@ On startup the launcher repairs interrupted updates, restores a previous `app/` 
 - The Electron renderer is sandboxed with context isolation, no Node integration, a restricted preload bridge, and a content security policy.
 - Downloads are limited to GitHub hosts and the configured relay. Checksums are verified when available. Archive paths and install/manifest paths are checked against traversal.
 - The launcher executes programs from release assets. Treat write access to the catalog repositories and the relay as code-execution trust.
-- **The relay has no user authentication yet.** Its catalog endpoints are public. If you give the relay a token that can read private repositories, anyone who discovers the relay URL can list those products and request their assets through `/api/download`. Keep the deployed catalog public-only until SSO/profiles/entitlements exist, or put the relay behind your own access control.
+- **The relay has no user authentication yet.** Its catalog endpoints are public. If you give the relay a token that can read private repositories, anyone who discovers the relay URL can list those products and request their assets through `/api/download`. Automatic discovery widens that exposure to every released repository under `CATALOG_OWNERS`; set `CATALOG_OWNERS=none` to expose only hand-picked entries. Keep the deployed catalog public-only until SSO/profiles/entitlements exist, or put the relay behind your own access control.
 - GitHub tokens stay on the relay and are never sent to the launcher. Relay errors are scrubbed so a credential is not echoed back to clients or written to logs. Never store a GitHub App private key in `GITHUB_TOKEN`; if a credential is exposed, revoke or rotate it immediately.
 - Release notes and metadata are rendered as text, not HTML.
 
@@ -354,8 +352,9 @@ On startup the launcher repairs interrupted updates, restores a previous `app/` 
 - Save-folder detection is heuristic: it looks inside the install first, then for a folder named after the product in the platform's user-data locations. Products that store saves somewhere unusual need **Open folder** to inspect manually.
 - The relay cache is in memory and resets on redeploy.
 - No per-release arch metadata; use explicit asset globs.
+- Auto-discovery includes every non-archived, non-fork repository under `CATALOG_OWNERS` whose newest release has a supported asset. A repository the relay's token cannot read is skipped, and a manual catalog entry is needed to override its name or platform rules. A failed refresh returns `502` so the launcher keeps its last-known catalog.
 
-The next releases are scoped and versioned in [ROADMAP.md](ROADMAP.md): `0.4.8` adds save restore, patch notes, and a version picker with rollback; `0.5.0` adds favourites and manual order; `0.6.0` adds library export, chunked downloads, and portable mode; `0.7.0` brings profiles and relay access control; `1.0.0` is the signing and schema-stability gate.
+The next releases are scoped and versioned in [ROADMAP.md](ROADMAP.md): `0.4.9` discovers released repositories automatically and removes the baked catalog; `0.5.0` adds favourites and manual order; `0.6.0` adds library export, chunked downloads, and portable mode; `0.7.0` brings profiles and relay access control; `1.0.0` is the signing and schema-stability gate.
 
 ## Scripts
 
@@ -364,7 +363,7 @@ The next releases are scoped and versioned in [ROADMAP.md](ROADMAP.md): `0.4.8` 
 | `npm run dev` | Electron app with Vite hot reload. |
 | `npm run dev:ui` | Renderer-only browser preview with demo data on port 5174. |
 | `npm run typecheck` | Type-check main/preload and renderer, including the tests. |
-| `npm test` | Run the downloader, play-state, and save-detection checks (`node --test` via tsx). |
+| `npm test` | Run the downloader, play-state, save, discovery, and catalog-cache checks (`node --test` via tsx). |
 | `npm run build` | Type-check and build the Electron app. |
 | `npm run start` | Launch the production bundle through electron-vite preview. |
 | `npm run dist:*` | Build platform installers into `release/`. |
@@ -394,6 +393,8 @@ It opens a hidden window, checks that the preload bridge exists and the React UI
 - **"The relay's GITHUB_TOKEN is not usable..."** — the relay rejected the credential before contacting GitHub. Usually `GITHUB_TOKEN` holds a GitHub App private key, an App JWT, or a malformed value. Replace it with a fine-grained personal access token as described in [GitHub token for private repositories](#github-token-for-private-repositories). Rotate any private key that was pasted into the variable.
 - **"GitHub rejected the configured GITHUB_TOKEN"** — the token is expired, revoked, or lacks access to the repository. Generate a fresh fine-grained token with Contents read access and update the Render environment variable.
 - **"Repository not found, or it is private..."** — set `GITHUB_TOKEN` on the relay. For public repositories, also confirm `repo` is `owner/name` and the release is published (not a draft).
+- **The catalog is briefly unavailable** — a failed discovery returns `502` instead of an empty list, and the launcher keeps the last catalog it saved. Recovery is automatic once GitHub and the relay's token work again.
+- **A new repository or release is missing** — auto-discovery refreshes every two minutes, and release metadata is cached for five. Confirm `CATALOG_OWNERS` covers the account (the launcher's own account by default), the token can read the repository, and the newest release has a `.zip`, `.tar.gz`, `.tgz`, `.exe`, or `.AppImage` asset. A manual `catalog.json` entry with `includePrereleases: false` will hide a newer prerelease.
 - **"No installable build"** — attach a `.zip`, `.tar.gz`, `.tgz`, portable `.exe` (Windows), or `.AppImage` (Linux); adjust the platform `asset` glob. If the release is a prerelease, set `includePrereleases: true`.
 - **"No runnable executable was found"** — set `platforms.<os>.executable` to the path inside the archive and republish.
 - **Windows SmartScreen warning** — the installer and product builds are unsigned. Use **More info → Run anyway** for your own builds, or sign them for distribution.

@@ -11,6 +11,7 @@ import type {
   ProductReleasesResponse
 } from '../../shared/types'
 import { loadCatalog, PLATFORMS, type Catalog, type CatalogProduct } from './catalog'
+import { catalogOwners, catalogWithDiscovered, DiscoveryError } from './discovery'
 import {
   getGitHubTokenProblem,
   getReleaseHistory,
@@ -34,9 +35,38 @@ try {
   process.exit(1)
 }
 
-const productById = new Map<string, CatalogProduct>(
-  catalog.products.map((product) => [product.id, product])
-)
+/**
+ * The hand-written catalog plus repositories discovered from CATALOG_OWNERS.
+ * Discovery has its own short cache, so this stays cheap per request.
+ */
+let knownProductCount = catalog.products.length
+let lastProducts: CatalogProduct[] | null = null
+let productsInFlight: Promise<CatalogProduct[]> | null = null
+
+async function allProducts(): Promise<CatalogProduct[]> {
+  if (!productsInFlight) {
+    productsInFlight = catalogWithDiscovered(catalog.products)
+      .then((products) => {
+        knownProductCount = products.length
+        lastProducts = products
+        return products
+      })
+      .finally(() => {
+        productsInFlight = null
+      })
+  }
+  return productsInFlight
+}
+
+/**
+ * Resolves a product for downloads and patch notes from the last successful
+ * catalog when possible, so a discovery refresh cannot delay or break a known
+ * install. The catalog endpoint still refreshes discovery on its own schedule.
+ */
+async function findProduct(id: string): Promise<CatalogProduct | undefined> {
+  const products = lastProducts ?? (await allProducts())
+  return products.find((product) => product.id === id)
+}
 
 const app = express()
 app.set('trust proxy', true)
@@ -145,7 +175,7 @@ app.get('/api/health', (_req, res) => {
     ok: true,
     version: VERSION,
     timestamp: new Date().toISOString(),
-    catalogProducts: catalog.products.length,
+    catalogProducts: knownProductCount,
     githubAuthenticated: hasGitHubToken()
   }
   res.setHeader('Cache-Control', 'no-store')
@@ -159,8 +189,22 @@ app.get(
     if (!platform) return
 
     const baseUrl = publicBaseUrl(req)
+    let products: CatalogProduct[]
+    try {
+      products = await allProducts()
+    } catch (error) {
+      console.error('[catalog] discovery failed:', error)
+      res.setHeader('Cache-Control', 'no-store')
+      res.status(502).json({
+        error:
+          error instanceof DiscoveryError
+            ? error.message
+            : 'The relay could not build the catalog. Try again shortly.'
+      })
+      return
+    }
     const resolved = await Promise.all(
-      catalog.products.map(async (product) => {
+      products.map(async (product) => {
         try {
           return (await resolveProduct(product, platform, baseUrl)).entry
         } catch (error) {
@@ -262,7 +306,7 @@ app.get(
     if (!platform) return
 
     const productId = typeof req.params.productId === 'string' ? req.params.productId : ''
-    const product = productById.get(productId)
+    const product = await findProduct(productId)
     if (!product) {
       res.status(404).json({ error: 'Unknown product.' })
       return
@@ -298,7 +342,7 @@ app.get(
 
     const productId = typeof req.params.productId === 'string' ? req.params.productId : ''
     const tag = typeof req.params.tag === 'string' ? req.params.tag : ''
-    const product = productById.get(productId)
+    const product = await findProduct(productId)
     if (!product) {
       res.status(404).json({ error: 'Unknown product.' })
       return
@@ -374,7 +418,7 @@ app.get(
     if (!platform) return
 
     const productId = typeof req.params.productId === 'string' ? req.params.productId : ''
-    const product = productById.get(productId)
+    const product = await findProduct(productId)
     if (!product) {
       res.status(404).json({ error: 'Unknown product.' })
       return
@@ -432,6 +476,14 @@ app.use((_req, res) => {
 })
 
 app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  if (error instanceof DiscoveryError) {
+    console.error('[server] discovery error:', error.message)
+    if (!res.headersSent) {
+      res.setHeader('Cache-Control', 'no-store')
+      res.status(502).json({ error: error.message })
+    }
+    return
+  }
   console.error('[server] unhandled error:', error)
   if (!res.headersSent) {
     res.status(500).json({ error: 'Internal relay error.' })
@@ -446,13 +498,16 @@ const server = app.listen(port, '0.0.0.0', () => {
     : hasGitHubToken()
       ? 'configured'
       : 'NOT configured'
+  const discoveredOwners = catalogOwners()
   console.info(
-    `MCM98 relay v${VERSION} listening on :${port} — ${catalog.products.length} product(s), launcher ${launcherRepo()}, GitHub token ${tokenStatus}`
+    `MCM98 relay v${VERSION} listening on :${port} — ${catalog.products.length} manual product(s)${
+      discoveredOwners.length > 0 ? `, auto-discovering ${discoveredOwners.join(', ')}` : ''
+    }, launcher ${launcherRepo()}, GitHub token ${tokenStatus}`
   )
   if (tokenProblem) {
     console.warn(`[github] GITHUB_TOKEN is unusable. ${tokenProblem}`)
   }
-  if (catalog.products.length === 0) {
+  if (catalog.products.length === 0 && discoveredOwners.length === 0) {
     console.warn(`Catalog ${catalog.sourcePath} is empty. Add products before shipping the launcher.`)
   }
 })

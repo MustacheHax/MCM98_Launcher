@@ -2,7 +2,7 @@
 
 Planned releases for the MCM98 Launcher and its relay, and the version each kind of change ships under. Shipped work is recorded in [CHANGELOG.md](CHANGELOG.md); this file is intent, not a promise, and it is re-ordered as priorities change.
 
-Current release: **0.4.8**.
+Current release: **0.4.9**.
 
 ## How versions are chosen
 
@@ -50,6 +50,14 @@ Shipped under a patch number so the 0.4.7 install base receives it as an update.
 - **Patch notes per product.** The relay returns the ten newest published releases per product; the drawer shows their notes, version, date and asset instead of only linking to GitHub, with the newest entry expanded.
 - **Version picker and rollback.** Install any published release of a product through a relay tag route, and keep one previous `app/` folder for a one-click local rollback. Replaces the current "crash recovery only" behaviour.
 - **Update detection corrected.** A release without a comparable version no longer counts as an update, while an unversioned dev build still accepts a numbered release.
+
+## 0.4.9 — shipped 2026-11-26
+
+Minor. No data-format change.
+
+- **Discovery replaces the baked catalog.** The relay lists repositories under `CATALOG_OWNERS` that have a published build, and `server/catalog.json` ships empty as an optional override.
+- **A failed discovery is a 502.** An account or repository resolution failure aborts the refresh instead of returning a partial list, so the launcher keeps its last-known catalog.
+- **Last-known catalog is protected.** The launcher keeps the previous non-empty catalog when a refresh fails or the relay returns no products.
 
 ## 0.5.0 — favourites and manual order
 

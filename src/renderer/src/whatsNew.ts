@@ -4,25 +4,21 @@
  * when the card should reappear for people who dismissed the previous one.
  */
 export const WHATS_NEW = {
-  version: '0.4.8',
+  version: '0.4.9',
   eyebrow: "What's new",
-  title: 'Your library, with a memory',
+  title: 'New projects, found automatically',
   items: [
     {
-      title: 'Saves you can put back',
-      text: 'Open the drawer to see every save archive with its date and size. Restore one over the current folder after a confirmation; it is blocked while the game is running.'
+      title: 'Release it and it appears',
+      text: 'The relay now discovers every repository on your account with a published build, so a new project shows up on its first release without editing a catalog.'
     },
     {
-      title: 'Patch notes in the drawer',
-      text: 'Each product now lists its ten newest releases with the real notes, version and date, newest expanded — no detour to GitHub.'
+      title: 'No baked-in product list',
+      text: 'The relay no longer carries a fixed product list. Products come from your releases, with an optional catalog file for pinning a name or asset rule.'
     },
     {
-      title: 'Pick a version, roll one back',
-      text: 'Install any published release from the version menu. The build you replaced stays on disk, so Roll back swaps it back in one click.'
-    },
-    {
-      title: 'Update checks that tell the truth',
-      text: 'A release without a comparable version no longer looks like an update, and an unversioned dev build still recognises a numbered release.'
+      title: 'Your last library stays put',
+      text: 'If the relay or GitHub is unavailable, the launcher keeps the last catalog it saw instead of replacing it with an empty one.'
     }
   ]
 } as const

@@ -118,7 +118,7 @@ export function StatusBar(): JSX.Element {
 
       <div className="statusbar-right">
         <span className="statusbar-brand">MCM98 Launcher</span>
-        <span className="statusbar-version mono">v{appInfo?.version ?? '0.4.8'}</span>
+        <span className="statusbar-version mono">v{appInfo?.version ?? '0.4.9'}</span>
       </div>
     </footer>
   )

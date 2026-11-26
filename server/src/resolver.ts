@@ -68,6 +68,15 @@ function isInstallable(asset: GitHubAsset, platform: Platform): boolean {
   return ARCHIVE_PATTERN.test(asset.name) || Boolean(DIRECT_EXECUTABLE_PATTERN[platform]?.test(asset.name))
 }
 
+/** Whether a release ships at least one build the launcher can install. */
+export function releaseHasInstallableAsset(release: GitHubRelease): boolean {
+  return release.assets.some(
+    (asset) =>
+      !AUXILIARY_ASSET_PATTERN.test(asset.name) &&
+      PLATFORMS.some((platform) => isInstallable(asset, platform))
+  )
+}
+
 function supportedFormats(platform: Platform): string {
   const base = '.zip, .tar.gz, or .tgz'
   if (platform === 'win32') return `${base}, or a portable .exe`

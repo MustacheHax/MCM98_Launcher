@@ -16,3 +16,5 @@ services:
         value: MustacheHax/MCM98_Launcher
       - key: CACHE_TTL_SECONDS
         value: "300"
+      - key: CATALOG_OWNERS
+        value: MustacheHax

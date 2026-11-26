@@ -2,15 +2,9 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { CatalogResponse, LauncherConfig, Platform } from '@shared/types'
+import { loadCatalogWithFallback, type CachedCatalog } from './catalogCacheCore'
 import type { Logger } from './logger'
 import { fetchCatalog } from './relay'
-
-interface CachedCatalog {
-  savedAt: string
-  backendUrl: string
-  platform: Platform
-  payload: CatalogResponse
-}
 
 function cachePath(dataRoot: string, backendUrl: string, platform: Platform): string {
   const key = createHash('sha1').update(`${backendUrl}|${platform}`).digest('hex').slice(0, 16)
@@ -56,21 +50,13 @@ export async function loadCatalog(
 ): Promise<CatalogResponse> {
   const path = cachePath(dataRoot, config.backendUrl, platform)
 
-  try {
-    const payload = await fetchCatalog(config, platform, log)
-    const savedAt = new Date().toISOString()
-    await writeCache(
-      path,
-      { savedAt, backendUrl: config.backendUrl, platform, payload },
-      log
-    )
-    return { ...payload, stale: false, cachedAt: savedAt }
-  } catch (error) {
-    const cached = await readCache(path, log)
-    if (!cached) throw error
-    log.warn(
-      `Relay unavailable (${error instanceof Error ? error.message : String(error)}); showing the catalog saved ${cached.savedAt}.`
-    )
-    return { ...cached.payload, stale: true, cachedAt: cached.savedAt }
-  }
+  return loadCatalogWithFallback({
+    backendUrl: config.backendUrl,
+    platform,
+    fetchCatalog: () => fetchCatalog(config, platform, log),
+    readCache: () => readCache(path, log),
+    writeCache: (value) => writeCache(path, value, log),
+    now: () => new Date(),
+    warn: (message) => log.warn(message)
+  })
 }

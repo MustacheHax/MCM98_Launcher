@@ -28,6 +28,8 @@ export interface GitHubRepo {
   description: string | null
   private: boolean
   archived: boolean
+  disabled?: boolean
+  fork?: boolean
   topics?: string[]
 }
 
@@ -36,6 +38,8 @@ export interface RepoSnapshot {
   release: GitHubRelease | null
   repoError: string | null
   releaseError: string | null
+  /** True when GitHub answered 404 because the repository has no releases. */
+  releaseMissing: boolean
   fetchedAt: number
   stale: boolean
 }
@@ -268,6 +272,65 @@ async function request<T>(path: string): Promise<T> {
   return (await response.json()) as T
 }
 
+let authenticatedLoginPromise: Promise<string | null> | null = null
+
+/**
+ * The account behind GITHUB_TOKEN. Discovery uses it to decide whether it may
+ * list private repositories through /user/repos. Cached per process.
+ */
+export async function authenticatedLogin(): Promise<string | null> {
+  if (!hasGitHubToken()) return null
+  if (!authenticatedLoginPromise) {
+    authenticatedLoginPromise = request<{ login?: string }>('/user')
+      .then((user) => (typeof user.login === 'string' ? user.login : null))
+      .catch((error) => {
+        authenticatedLoginPromise = null
+        throw error
+      })
+  }
+  return authenticatedLoginPromise
+}
+
+/**
+ * Repositories under one account that the relay's token can see. The token's
+ * own account is listed through /user/repos so private repositories come back;
+ * any other account falls back to its public repositories.
+ */
+export async function listOwnerRepos(owner: string): Promise<GitHubRepo[]> {
+  const target = owner.toLowerCase()
+  let self = false
+  try {
+    self = (await authenticatedLogin())?.toLowerCase() === target
+  } catch (error) {
+    // With a token configured, a failed /user lookup means the private half of
+    // the catalog is unavailable. Report it instead of silently listing only
+    // public repositories and handing the launcher an incomplete catalog.
+    if (hasGitHubToken() || getGitHubTokenProblem()) throw error
+    console.warn(
+      `[github] could not read the authenticated account: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    )
+  }
+
+  const repos: GitHubRepo[] = []
+  for (let page = 1; page <= 10; page++) {
+    const path = self
+      ? `/user/repos?affiliation=owner&sort=updated&direction=desc&per_page=100&page=${page}`
+      : `/users/${encodeURIComponent(owner)}/repos?sort=updated&direction=desc&per_page=100&page=${page}`
+    const batch = await request<GitHubRepo[]>(path)
+    repos.push(
+      ...batch.filter(
+        (repo) =>
+          typeof repo.full_name === 'string' &&
+          repo.full_name.split('/')[0]?.toLowerCase() === target
+      )
+    )
+    if (batch.length < 100) break
+  }
+  return repos
+}
+
 function describe(error: unknown, context: 'repo' | 'release'): string {
   if (!(error instanceof GitHubError)) {
     return error instanceof Error ? error.message : String(error)
@@ -414,6 +477,10 @@ export async function getRepoSnapshot(
     repoResult.status === 'rejected' ? describe(repoResult.reason, 'repo') : null
   const releaseError =
     releaseResult.status === 'rejected' ? describe(releaseResult.reason, 'release') : null
+  const releaseMissing =
+    releaseResult.status === 'rejected' &&
+    releaseResult.reason instanceof GitHubError &&
+    releaseResult.reason.status === 404
 
   if (!repoValue && !releaseValue && cached && now - cached.fetchedAt < 60 * 60 * 1000) {
     console.warn(`[github] serving stale snapshot for ${repo}: ${repoError ?? releaseError}`)
@@ -425,6 +492,7 @@ export async function getRepoSnapshot(
     release: releaseValue,
     repoError,
     releaseError,
+    releaseMissing,
     fetchedAt: now,
     stale: false
   }

@@ -8,6 +8,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 Planned work and the version each item ships under live in [ROADMAP.md](ROADMAP.md).
 
+## [0.4.9] — 2026-11-26
+
+Minor. No config, `install.json`, or `play-state.json` changes.
+
+### Added
+
+- **Automatic catalog discovery.** The relay adds every repository under `CATALOG_OWNERS` (the launcher's own account by default) that has a published release with a supported build, so a new project appears when it publishes its first release. Discovery is cached for two minutes, and `CATALOG_OWNERS=none` turns it off.
+- **The catalog is discovery-only.** `server/catalog.json` now ships empty; the four baked products are gone. The file remains as an optional override for a display name, summary, tags, or platform asset rule. The launcher keeps its last successful catalog in `<userData>/cache` and refuses to replace a non-empty cache with an empty relay response, so a GitHub or token outage shows the last known products instead of an empty library.
+- **A failed discovery is an error, not an empty catalog.** If an account cannot be listed or any repository cannot be resolved, `/api/catalog` answers `502` instead of a partial list. The launcher then serves its last-known cache. Five cache-fallback tests and a discovery-failure test cover the path.
+
+### Fixed
+
+- **A newly created repository never appeared in the launcher.** `MustacheHax/lands-of-the-lost` (Project LotL) was invisible because it was not in the baked catalog. It now appears through discovery as **Lands Of The Lost**; add an optional catalog entry if it should be labelled Project LotL. The same applies to the other repos' discovery names (`StreamFriend`, `UserFriendly`, `PuzzleBud`).
+
 ## [0.4.8] — 2026-11-20
 
 Shipped under a patch number so 0.4.7 installs receive it as an update. The three features below were scoped for 0.5.0; none of them changes the config, `install.json`, or `play-state.json` format, so a 0.4.x install upgrades in place.
@@ -119,7 +133,8 @@ The largest release so far: the launcher gained persistence, resume, and library
 
 Releases before 0.3.0 predate this changelog. In short: 0.2.0 brought self-installation and the relay-backed catalog, and 0.1.0 was the first release with catalog listing, install, launch, and uninstall.
 
-[Unreleased]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.8...HEAD
+[Unreleased]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.9...HEAD
+[0.4.9]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.8...v0.4.9
 [0.4.8]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.7...v0.4.8
 [0.4.7]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.5...v0.4.7
 [0.4.5]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.0...v0.4.5
