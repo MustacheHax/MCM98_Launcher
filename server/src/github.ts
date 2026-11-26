@@ -31,6 +31,10 @@ export interface GitHubRepo {
   disabled?: boolean
   fork?: boolean
   topics?: string[]
+  /** GitHub timestamps used to rank catalog highlights. */
+  created_at?: string | null
+  updated_at?: string | null
+  pushed_at?: string | null
 }
 
 export interface RepoSnapshot {

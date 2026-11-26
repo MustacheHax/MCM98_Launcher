@@ -79,6 +79,7 @@ function makeProduct(input: {
   repo: string
   tags: string[]
   featured?: boolean
+  repoCreatedAt: string
   available: Platform[]
   release: ProductEntry['release']
   executable: string | null
@@ -95,6 +96,7 @@ function makeProduct(input: {
     status: input.release ? 'ready' : 'unavailable',
     error: input.error ?? null,
     platform: 'win32',
+    repoCreatedAt: input.repoCreatedAt,
     availablePlatforms: input.available,
     release: input.release,
     install: input.release ? { executable: input.executable, args: [] } : null
@@ -111,6 +113,7 @@ function buildCatalogProducts(): ProductEntry[] {
       repo: 'MCM98/hollow-signal',
       tags: ['game', 'horror', 'narrative'],
       featured: true,
+      repoCreatedAt: '2026-02-10T18:20:00Z',
       available: ['win32'],
       release: makeRelease(
         'v2.1.0',
@@ -128,6 +131,7 @@ function buildCatalogProducts(): ProductEntry[] {
         'Late-night street racing through a rain-soaked harbour city. Build a car, learn the lines, own the hill.',
       repo: 'MCM98/drift-circuit',
       tags: ['game', 'racing', 'arcade'],
+      repoCreatedAt: '2026-08-14T11:00:00Z',
       available: ['win32', 'linux'],
       release: makeRelease(
         'v1.4.2',
@@ -145,6 +149,7 @@ function buildCatalogProducts(): ProductEntry[] {
         'The content pipeline in a box: texture validation, atlas packing, and batch import for the rest of the studio.',
       repo: 'MCM98/foundry-tools',
       tags: ['tool', 'pipeline'],
+      repoCreatedAt: '2025-12-01T09:45:00Z',
       available: ['win32'],
       release: makeRelease(
         'v0.9.7',
@@ -162,6 +167,7 @@ function buildCatalogProducts(): ProductEntry[] {
         'A quiet narrative sim about running a stall in a city that never quite sleeps. Currently in closed development.',
       repo: 'MCM98/night-market',
       tags: ['game', 'narrative', 'sim'],
+      repoCreatedAt: '2026-06-20T15:30:00Z',
       available: [],
       release: null,
       executable: null,
@@ -273,7 +279,7 @@ export function createDemoApi(): LauncherApi {
   const timers = new Map<string, { interval: number | null; timeouts: number[] }>()
   let launcherUpdate: LauncherUpdateInfo = {
     state: 'available',
-    currentVersion: '0.4.9',
+    currentVersion: '0.4.92',
     latestVersion: '0.5.0',
     releaseName: 'Launcher 0.5.0',
     releaseUrl: 'https://github.com/MustacheHax/MCM98_Launcher/releases',
@@ -441,7 +447,7 @@ export function createDemoApi(): LauncherApi {
       await wait(700)
       const health: HealthResponse = {
         ok: true,
-        version: '0.4.9',
+        version: '0.4.92',
         timestamp: new Date().toISOString(),
         catalogProducts: buildCatalogProducts().length,
         githubAuthenticated: true
@@ -451,7 +457,7 @@ export function createDemoApi(): LauncherApi {
 
     async getAppInfo() {
       const info: AppInfo = {
-        version: '0.4.9',
+        version: '0.4.92',
         platform: 'win32',
         arch: 'x64',
         isPackaged: false,
@@ -465,7 +471,7 @@ export function createDemoApi(): LauncherApi {
     async fetchCatalog() {
       await wait(720)
       const response: CatalogResponse = {
-        backendVersion: '0.4.9',
+        backendVersion: '0.4.92',
         generatedAt: new Date().toISOString(),
         platform: 'win32',
         products: buildCatalogProducts()

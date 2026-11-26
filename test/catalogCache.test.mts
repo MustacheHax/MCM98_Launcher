@@ -41,7 +41,7 @@ function product(id: string): ProductEntry {
 
 function catalog(products: ProductEntry[]): CatalogResponse {
   return {
-    backendVersion: '0.4.9',
+    backendVersion: '0.4.92',
     generatedAt: '2026-11-25T00:00:00.000Z',
     platform: 'win32',
     products

@@ -111,9 +111,7 @@ export function shortPlatformLabel(platform: Platform): string {
   return platform === 'win32' ? 'WIN' : platform === 'darwin' ? 'MAC' : 'LINUX'
 }
 
-export function findInstalled(library: InstalledProduct[], productId: string): InstalledProduct | undefined {
-  return library.find((product) => product.id === productId)
-}
+export { findCatalogProduct, findInstalled } from './productMatch'
 
 const TERMINAL: InstallPhase[] = ['done', 'error', 'cancelled']
 

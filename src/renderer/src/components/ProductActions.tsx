@@ -9,12 +9,14 @@ interface ProductActionsProps {
 }
 
 export function ProductActions({ product, size = 'sm' }: ProductActionsProps): JSX.Element {
-  const { library, tasks, running, install, launch, busyProductId, navigate, updateFor } = useApp()
-  const installed = findInstalled(library, product.id)
-  const task = activeTaskFor(tasks, product.id)
-  const isRunning = running.includes(product.id)
+  const { library, tasks, running, install, busyProductId, navigate, updateFor, closeProduct } =
+    useApp()
+  const installed = findInstalled(library, product)
+  const activeId = installed?.id ?? product.id
+  const task = activeTaskFor(tasks, activeId)
+  const isRunning = running.includes(activeId)
   const updateAvailable = Boolean(updateFor(product))
-  const busy = busyProductId === product.id
+  const busy = busyProductId === activeId
   const sizeClass = size === 'sm' ? 'btn-sm' : ''
   const progress = task ? Math.round(taskProgress(task)) : 0
 
@@ -48,11 +50,14 @@ export function ProductActions({ product, size = 'sm' }: ProductActionsProps): J
         <>
           <button
             className={`btn btn-primary ${sizeClass}`}
-            onClick={() => void launch(installed.id)}
-            disabled={busy}
+            onClick={() => {
+              closeProduct()
+              navigate('library')
+            }}
+            title="Open this product in your library"
           >
-            <Icon name="play" size={14} />
-            {busy ? 'Starting…' : 'Play'}
+            <Icon name="library" size={14} />
+            Library
           </button>
           {updateAvailable && (
             <button

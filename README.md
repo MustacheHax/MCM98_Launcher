@@ -196,9 +196,9 @@ The launcher checks its own repository for stable GitHub Releases. By default th
 
 The app compares the release version with its own and only prompts when the release is newer. Semantic versions are read from the tag first, then from the asset name and release title, so a rolling tag such as `newest` still resolves to a comparable version. **Update now** downloads the build through the relay, verifies GitHub's digest when present, and hands off to a small detached helper. The helper waits for the launcher to exit, runs the NSIS installer (or copies a portable zip / AppImage / archive into place), and relaunches the launcher. On macOS, the downloaded DMG or zip is opened in Finder and the user finishes the drag-install. The published release must not be a prerelease or draft.
 
-The current app version is `0.4.9`. If the newest release has no comparable version at all, Settings explains that instead of offering a bogus update.
+The current app version is `0.4.92`. If the newest release has no comparable version at all, Settings explains that instead of offering a bogus update.
 
-Self-installation arrived in 0.2.0. Install 0.2.0 or newer manually once (run `release/MCM98 Launcher-0.4.9-win-x64.exe` after attaching it to the release); every later version can then update from inside the running launcher. A 0.1.0 build can only detect the release and open GitHub.
+Self-installation arrived in 0.2.0. Install 0.2.0 or newer manually once (run `release/MCM98 Launcher-0.4.92-win-x64.exe` after attaching it to the release); every later version can then update from inside the running launcher. A 0.1.0 build can only detect the release and open GitHub.
 
 ### Versioning and roadmap
 
@@ -354,7 +354,7 @@ On startup the launcher repairs interrupted updates, restores a previous `app/` 
 - No per-release arch metadata; use explicit asset globs.
 - Auto-discovery includes every non-archived, non-fork repository under `CATALOG_OWNERS` whose newest release has a supported asset. A repository the relay's token cannot read is skipped, and a manual catalog entry is needed to override its name or platform rules. A failed refresh returns `502` so the launcher keeps its last-known catalog.
 
-The next releases are scoped and versioned in [ROADMAP.md](ROADMAP.md): `0.4.9` discovers released repositories automatically and removes the baked catalog; `0.5.0` adds favourites and manual order; `0.6.0` adds library export, chunked downloads, and portable mode; `0.7.0` brings profiles and relay access control; `1.0.0` is the signing and schema-stability gate.
+The next releases are scoped and versioned in [ROADMAP.md](ROADMAP.md): `0.4.9` discovered released repositories automatically; `0.4.91` matches existing installs to those entries; `0.4.92` adds the Newest! and Recently Updated catalog banners; `0.5.0` adds favourites and manual order; `0.6.0` adds library export, chunked downloads, and portable mode; `0.7.0` brings profiles and relay access control; `1.0.0` is the signing and schema-stability gate.
 
 ## Scripts
 
@@ -363,7 +363,7 @@ The next releases are scoped and versioned in [ROADMAP.md](ROADMAP.md): `0.4.9` 
 | `npm run dev` | Electron app with Vite hot reload. |
 | `npm run dev:ui` | Renderer-only browser preview with demo data on port 5174. |
 | `npm run typecheck` | Type-check main/preload and renderer, including the tests. |
-| `npm test` | Run the downloader, play-state, save, discovery, and catalog-cache checks (`node --test` via tsx). |
+| `npm test` | Run the downloader, play-state, save, discovery, catalog-banner, product-matching, and catalog-cache checks (`node --test` via tsx). |
 | `npm run build` | Type-check and build the Electron app. |
 | `npm run start` | Launch the production bundle through electron-vite preview. |
 | `npm run dist:*` | Build platform installers into `release/`. |

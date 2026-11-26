@@ -14,9 +14,10 @@ import { ProductActions } from './ProductActions'
 
 export function ProductCard({ product }: { product: ProductEntry }): JSX.Element {
   const { library, tasks, running, openProduct, updateFor, isUpdateSkipped } = useApp()
-  const installed = findInstalled(library, product.id)
-  const task = activeTaskFor(tasks, product.id)
-  const isRunning = running.includes(product.id)
+  const installed = findInstalled(library, product)
+  const activeId = installed?.id ?? product.id
+  const task = activeTaskFor(tasks, activeId)
+  const isRunning = running.includes(activeId)
   const updateAvailable = Boolean(updateFor(product))
   const updateSkipped = isUpdateSkipped(product)
   const primaryTag = product.tags[0]

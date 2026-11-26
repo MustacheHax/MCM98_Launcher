@@ -653,7 +653,7 @@ export function SettingsView(): JSX.Element {
                   <div className="launcher-update-head">
                     <span className={`status-dot ${updateTone}`} />
                     <span>Launcher update</span>
-                    <span className="mono">v{appInfo?.version ?? '0.4.9'}</span>
+                    <span className="mono">v{appInfo?.version ?? '0.4.92'}</span>
                   </div>
                   <p>{updateMessage}</p>
                   {updateAvailable && updateBusy && (
@@ -775,7 +775,7 @@ export function SettingsView(): JSX.Element {
                 <dl className="about-grid">
                   <div>
                     <dt>Version</dt>
-                    <dd className="mono">v{appInfo?.version ?? '0.4.9'}</dd>
+                    <dd className="mono">v{appInfo?.version ?? '0.4.92'}</dd>
                   </div>
                   <div>
                     <dt>Platform</dt>

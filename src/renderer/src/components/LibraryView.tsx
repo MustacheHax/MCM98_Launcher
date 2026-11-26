@@ -1,6 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useApp } from '../state'
-import { activeTaskFor, formatBytes, formatDate, isTerminalPhase, playSummary, versionLabel } from '../utils'
+import {
+  activeTaskFor,
+  findCatalogProduct,
+  formatBytes,
+  formatDate,
+  isTerminalPhase,
+  playSummary,
+  versionLabel
+} from '../utils'
 import { PageHeader } from './PageHeader'
 import { Cover } from './Cover'
 import { Icon } from './Icons'
@@ -36,12 +44,14 @@ export function LibraryView(): JSX.Element {
   const updateMap = useMemo(() => {
     const map = new Map<string, string>()
     if (!catalog) return map
-    for (const product of catalog.products) {
-      const latest = updateFor(product)
+    for (const product of library) {
+      const catalogProduct = findCatalogProduct(catalog.products, product)
+      if (!catalogProduct) continue
+      const latest = updateFor(catalogProduct)
       if (latest) map.set(product.id, latest)
     }
     return map
-  }, [catalog, updateFor])
+  }, [catalog, library, updateFor])
 
   const totalSize = library.reduce((sum, product) => sum + product.sizeBytes, 0)
   const activeDownloads = tasks.filter((task) => !isTerminalPhase(task.phase)).length
@@ -232,7 +242,9 @@ export function LibraryView(): JSX.Element {
         <div className="library-list">
           {visible.map((product) => {
             const latest = updateMap.get(product.id)
-            const catalogProduct = catalog?.products.find((item) => item.id === product.id)
+            const catalogProduct = catalog
+              ? findCatalogProduct(catalog.products, product)
+              : undefined
             const task = activeTaskFor(tasks, product.id)
             const isRunning = running.includes(product.id)
             const busy = busyProductId === product.id

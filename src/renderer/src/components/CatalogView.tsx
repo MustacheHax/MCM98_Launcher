@@ -1,7 +1,16 @@
 import { useMemo } from 'react'
 import type { ProductEntry } from '@shared/types'
 import { useApp } from '../state'
-import { formatBytes, formatDate, platformLabel, productTags, releaseVersionLabel } from '../utils'
+import {
+  findInstalled,
+  formatBytes,
+  formatDate,
+  platformLabel,
+  productTags,
+  relativeTime,
+  releaseVersionLabel
+} from '../utils'
+import { catalogBanners } from '../catalogBanners'
 import { PageHeader } from './PageHeader'
 import { Cover } from './Cover'
 import { Icon } from './Icons'
@@ -43,6 +52,8 @@ export function CatalogView(): JSX.Element {
       ) ?? null,
     [products]
   )
+
+  const banners = useMemo(() => catalogBanners(products), [products])
 
   const showHero = Boolean(featured && !query)
   const gridProducts =
@@ -127,6 +138,10 @@ export function CatalogView(): JSX.Element {
 
       {catalog && products.length > 0 && (
         <>
+          {!query && (banners.newest || banners.recentlyUpdated) && (
+            <TopBanners newest={banners.newest} recentlyUpdated={banners.recentlyUpdated} />
+          )}
+
           {showHero && featured && <FeaturedHero product={featured} />}
 
           <div className="section-heading">
@@ -167,13 +182,68 @@ export function CatalogView(): JSX.Element {
   )
 }
 
+function TopBanners({
+  newest,
+  recentlyUpdated
+}: {
+  newest: ProductEntry | null
+  recentlyUpdated: ProductEntry | null
+}): JSX.Element {
+  const { openProduct } = useApp()
+
+  return (
+    <section className="catalog-banners" aria-label="Catalog highlights">
+      {newest && (
+        <button className="catalog-banner newest" onClick={() => openProduct(newest)}>
+          <span className="banner-mark">
+            <Icon name="spark" size={18} />
+          </span>
+          <span className="banner-copy">
+            <span className="banner-label">Newest!</span>
+            <strong>{newest.name}</strong>
+            <span className="banner-meta">
+              {newest.release
+                ? `${releaseVersionLabel(newest.release)} · newly listed`
+                : 'Newly listed repository'}
+            </span>
+          </span>
+          <Icon name="chevronRight" size={16} className="banner-chevron" />
+        </button>
+      )}
+
+      {recentlyUpdated && recentlyUpdated.release && (
+        <button
+          className="catalog-banner updated"
+          onClick={() => openProduct(recentlyUpdated)}
+        >
+          <span className="banner-mark">
+            <Icon name="refresh" size={18} />
+          </span>
+          <span className="banner-copy">
+            <span className="banner-label">Recently Updated</span>
+            <strong>{recentlyUpdated.name}</strong>
+            <span className="banner-meta">
+              {releaseVersionLabel(recentlyUpdated.release)} · Updated{' '}
+              {relativeTime(recentlyUpdated.release.publishedAt) ||
+                formatDate(recentlyUpdated.release.publishedAt)}
+            </span>
+          </span>
+          <Icon name="chevronRight" size={16} className="banner-chevron" />
+        </button>
+      )}
+    </section>
+  )
+}
+
 function FeaturedHero({ product }: { product: ProductEntry }): JSX.Element {
-  const { openProduct, running, tasks, updateFor } = useApp()
+  const { openProduct, running, tasks, updateFor, library } = useApp()
+  const installed = findInstalled(library, product)
+  const activeId = installed?.id ?? product.id
   const updateAvailable = Boolean(updateFor(product))
   const task = tasks.find(
-    (item) => item.productId === product.id && !['done', 'error', 'cancelled'].includes(item.phase)
+    (item) => item.productId === activeId && !['done', 'error', 'cancelled'].includes(item.phase)
   )
-  const isRunning = running.includes(product.id)
+  const isRunning = running.includes(activeId)
 
   return (
     <section className="hero">

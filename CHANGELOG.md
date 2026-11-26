@@ -8,6 +8,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 Planned work and the version each item ships under live in [ROADMAP.md](ROADMAP.md).
 
+## [0.4.92] — 2026-11-26
+
+Feature release requested under a patch number. No config, `install.json`, or `play-state.json` changes. The catalog response gains one optional field, which older launchers ignore.
+
+### Added
+
+- **Top banners on the catalog.** The newest repository gets a **Newest!** banner, and the older repository with the most recently published release gets a **Recently Updated** banner. Both open the product drawer. The newest banner is ranked by the repository's GitHub creation date, so it remains until another repository is created; the updated banner follows release dates and changes whenever an older repository publishes.
+- **`repoCreatedAt` on catalog entries.** Discovery and manual entries carry the repository creation timestamp used by the banner. `Recently Updated` works against older relays because it only needs the release date; **Newest!** appears once a relay with this field is deployed.
+
+## [0.4.91] — 2026-11-26
+
+Patch. No config, `install.json`, `play-state.json`, or relay contract changes.
+
+### Fixed
+
+- **Installed products were offered as fresh installs after discovery changed their ids.** Discovery derives a product id from its repository name, so `MustacheHax/UserFriendly` became `userfriendly` while its existing manifest was still `user-friendly`; the catalog compared ids only and showed **Install** for 3 of 4 installed products. Matching now falls back to the repository, so updates, repairs, saves, rollback, and library details stay attached to the existing install instead of creating a duplicate under a new id.
+- **The installed-product action is Library again.** A catalog card or drawer for an installed product offers **Library** and opens the library, matching the flow before discovery.
+
 ## [0.4.9] — 2026-11-26
 
 Minor. No config, `install.json`, or `play-state.json` changes.
@@ -133,7 +151,9 @@ The largest release so far: the launcher gained persistence, resume, and library
 
 Releases before 0.3.0 predate this changelog. In short: 0.2.0 brought self-installation and the relay-backed catalog, and 0.1.0 was the first release with catalog listing, install, launch, and uninstall.
 
-[Unreleased]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.9...HEAD
+[Unreleased]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.92...HEAD
+[0.4.92]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.91...v0.4.92
+[0.4.91]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.9...v0.4.91
 [0.4.9]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.8...v0.4.9
 [0.4.8]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.7...v0.4.8
 [0.4.7]: https://github.com/MustacheHax/MCM98_Launcher/compare/v0.4.5...v0.4.7

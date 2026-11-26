@@ -19,6 +19,7 @@ import { errorMessage, demoMode, getLauncher } from './api'
 import { AppContext, type ToastKind, type View } from './state'
 import {
   activeTaskFor,
+  findInstalled,
   isTerminalPhase,
   isUpdateAvailable,
   releaseVersionLabel,
@@ -45,11 +46,11 @@ interface ToastState {
 
 const VIEW_ORDER: View[] = ['library', 'catalog', 'downloads', 'settings']
 
-function toInstallRequest(product: ProductEntry): InstallRequest {
+function toInstallRequest(product: ProductEntry, productId = product.id): InstallRequest {
   const release = product.release
   if (!release) throw new Error('This product has no installable release.')
   return {
-    productId: product.id,
+    productId,
     name: product.name,
     version: versionFromRelease(release),
     repo: product.repo,
@@ -324,10 +325,12 @@ function App(): JSX.Element {
   const startInstall = useCallback(
     async (product: ProductEntry, mode: 'install' | 'repair'): Promise<void> => {
       if (!bridge || !product.release || product.status !== 'ready') return
-      if (mode === 'repair') setRepairingId(product.id)
-      else setBusyProductId(product.id)
+      const installed = findInstalled(library, product)
+      const productId = installed?.id ?? product.id
+      if (mode === 'repair') setRepairingId(productId)
+      else setBusyProductId(productId)
       try {
-        await bridge.startInstall(toInstallRequest(product))
+        await bridge.startInstall(toInstallRequest(product, productId))
         setSelected(null)
         setView('downloads')
         toast(
@@ -341,7 +344,7 @@ function App(): JSX.Element {
         else setBusyProductId(null)
       }
     },
-    [bridge, toast]
+    [bridge, library, toast]
   )
 
   const install = useCallback(
@@ -352,10 +355,12 @@ function App(): JSX.Element {
   const installRelease = useCallback(
     async (product: ProductEntry, release: ProductRelease): Promise<void> => {
       if (!bridge || !release.asset) return
-      setBusyProductId(product.id)
+      const installed = findInstalled(library, product)
+      const productId = installed?.id ?? product.id
+      setBusyProductId(productId)
       try {
         await bridge.startInstall({
-          productId: product.id,
+          productId,
           name: product.name,
           version: release.version || release.tag,
           repo: product.repo,
@@ -376,7 +381,7 @@ function App(): JSX.Element {
         setBusyProductId(null)
       }
     },
-    [bridge, toast]
+    [bridge, library, toast]
   )
 
   const rollbackProduct = useCallback(
@@ -511,52 +516,50 @@ function App(): JSX.Element {
     [bridge, config, refreshLibrary, loadCatalog]
   )
 
-  const installedById = useMemo(
-    () => new Map(library.map((product) => [product.id, product])),
-    [library]
-  )
-
   const updateFor = useCallback(
     (product: ProductEntry): string | null => {
       if (!product.release) return null
-      const installed = installedById.get(product.id)
+      const installed = findInstalled(library, product)
       if (!installed) return null
       const latest = versionFromRelease(product.release)
       if (!isUpdateAvailable(installed.version, latest)) return null
-      if (config?.skippedUpdates?.[product.id] === latest) return null
+      const skipped =
+        config?.skippedUpdates?.[installed.id] ?? config?.skippedUpdates?.[product.id]
+      if (skipped === latest) return null
       return latest
     },
-    [installedById, config?.skippedUpdates]
+    [library, config?.skippedUpdates]
   )
 
   const isUpdateSkipped = useCallback(
     (product: ProductEntry): boolean => {
       if (!product.release || !config) return false
-      const installed = installedById.get(product.id)
+      const installed = findInstalled(library, product)
       if (!installed) return false
       const latest = versionFromRelease(product.release)
-      return (
-        isUpdateAvailable(installed.version, latest) &&
-        config.skippedUpdates[product.id] === latest
-      )
+      const skipped =
+        config.skippedUpdates[installed.id] ?? config.skippedUpdates[product.id]
+      return isUpdateAvailable(installed.version, latest) && skipped === latest
     },
-    [installedById, config]
+    [library, config]
   )
 
   const skipUpdate = useCallback(
     async (product: ProductEntry): Promise<void> => {
       if (!config || !product.release) return
       const latest = versionFromRelease(product.release)
+      const installed = findInstalled(library, product)
+      const key = installed?.id ?? product.id
       try {
         await saveSettings({
-          skippedUpdates: { ...config.skippedUpdates, [product.id]: latest }
+          skippedUpdates: { ...config.skippedUpdates, [key]: latest }
         })
         toast(`Skipped ${product.name} ${versionLabel(latest)}.`, 'info')
       } catch (error) {
         toast(errorMessage(error), 'error')
       }
     },
-    [config, saveSettings, toast]
+    [config, library, saveSettings, toast]
   )
 
   const unskipUpdate = useCallback(
@@ -575,12 +578,15 @@ function App(): JSX.Element {
 
   const updateAll = useCallback(async (): Promise<void> => {
     if (!bridge || !catalog) return
-    const targets = catalog.products.filter(
-      (product) =>
+    const targets = catalog.products.filter((product) => {
+      const installed = findInstalled(library, product)
+      const activeId = installed?.id ?? product.id
+      return (
         updateFor(product) !== null &&
-        !running.includes(product.id) &&
-        !activeTaskFor(tasks, product.id)
-    )
+        !running.includes(activeId) &&
+        !activeTaskFor(tasks, activeId)
+      )
+    })
     if (targets.length === 0) {
       toast('Everything installed is already up to date.', 'info')
       return
@@ -588,8 +594,9 @@ function App(): JSX.Element {
 
     let queued = 0
     for (const product of targets) {
+      const installed = findInstalled(library, product)
       try {
-        await bridge.startInstall(toInstallRequest(product))
+        await bridge.startInstall(toInstallRequest(product, installed?.id))
         queued += 1
       } catch (error) {
         toast(errorMessage(error), 'error')
@@ -599,7 +606,7 @@ function App(): JSX.Element {
       setView('downloads')
       toast(`Queued ${queued} update${queued === 1 ? '' : 's'}.`, 'success')
     }
-  }, [bridge, catalog, updateFor, running, tasks, toast])
+  }, [bridge, catalog, library, updateFor, running, tasks, toast])
 
   const openPalette = useCallback(() => setPaletteOpen(true), [])
   const closePalette = useCallback(() => setPaletteOpen(false), [])

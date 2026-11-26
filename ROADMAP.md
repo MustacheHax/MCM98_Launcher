@@ -2,7 +2,7 @@
 
 Planned releases for the MCM98 Launcher and its relay, and the version each kind of change ships under. Shipped work is recorded in [CHANGELOG.md](CHANGELOG.md); this file is intent, not a promise, and it is re-ordered as priorities change.
 
-Current release: **0.4.9**.
+Current release: **0.4.92**.
 
 ## How versions are chosen
 
@@ -58,6 +58,20 @@ Minor. No data-format change.
 - **Discovery replaces the baked catalog.** The relay lists repositories under `CATALOG_OWNERS` that have a published build, and `server/catalog.json` ships empty as an optional override.
 - **A failed discovery is a 502.** An account or repository resolution failure aborts the refresh instead of returning a partial list, so the launcher keeps its last-known catalog.
 - **Last-known catalog is protected.** The launcher keeps the previous non-empty catalog when a refresh fails or the relay returns no products.
+
+## 0.4.91 — shipped 2026-11-26
+
+Patch. No data-format change.
+
+- **Legacy installs match discovered catalog entries.** Installed manifests are matched by id or repository, so a discovery-generated id no longer hides an install created under an older catalog id.
+- **Library action restored.** Installed catalog cards navigate to the library instead of offering a fresh install.
+
+## 0.4.92 — shipped 2026-11-26
+
+Feature release requested under a patch number. No data-format change; the catalog response adds an optional `repoCreatedAt` field.
+
+- **Newest! banner.** The repository with the latest GitHub creation date gets the first catalog banner and stays there until a newer repository exists.
+- **Recently Updated banner.** The older repository with the most recently published release gets the second banner, so it changes whenever an older project ships.
 
 ## 0.5.0 — favourites and manual order
 

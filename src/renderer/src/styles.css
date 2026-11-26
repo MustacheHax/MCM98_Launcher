@@ -1186,6 +1186,157 @@ button:disabled {
 }
 
 /* ------------------------------------------------------------------ */
+/* Catalog top banners                                                 */
+/* ------------------------------------------------------------------ */
+
+.catalog-banners {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.catalog-banner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(125deg, var(--panel-2), var(--panel));
+  color: var(--text);
+  text-align: left;
+  overflow: hidden;
+  transition:
+    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+
+.catalog-banner::before {
+  content: "";
+  position: absolute;
+  inset: -60% -20% auto auto;
+  width: 190px;
+  height: 190px;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(20px);
+  opacity: 0.16;
+}
+
+.catalog-banner.newest::before {
+  background: var(--accent);
+}
+
+.catalog-banner.updated::before {
+  background: var(--blue);
+}
+
+.catalog-banner:only-child {
+  grid-column: 1 / -1;
+}
+
+.catalog-banner:hover {
+  transform: translateY(-2px);
+  border-color: var(--line-strong);
+  background: linear-gradient(125deg, var(--panel-hover), var(--panel));
+}
+
+.catalog-banner.newest {
+  border-color: rgba(var(--accent-rgb), 0.2);
+}
+
+.catalog-banner.updated {
+  border-color: rgba(124, 199, 255, 0.16);
+}
+
+.banner-mark {
+  position: relative;
+  z-index: 1;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+}
+
+.catalog-banner.newest .banner-mark {
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.18);
+}
+
+.catalog-banner.updated .banner-mark {
+  background: rgba(124, 199, 255, 0.1);
+  border: 1px solid rgba(124, 199, 255, 0.18);
+  color: var(--blue);
+}
+
+.banner-copy {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.banner-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: calc(9px * var(--text-scale));
+  font-weight: 750;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.catalog-banner.newest .banner-label {
+  color: var(--accent);
+}
+
+.catalog-banner.updated .banner-label {
+  color: var(--blue);
+}
+
+.banner-copy strong {
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: calc(17px * var(--text-scale));
+  font-weight: 650;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.banner-meta {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: calc(10.2px * var(--text-scale));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.banner-chevron {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--dim);
+  transition: color 0.16s ease, transform 0.16s ease;
+}
+
+.catalog-banner:hover .banner-chevron {
+  color: var(--text-soft);
+  transform: translateX(2px);
+}
+
+/* ------------------------------------------------------------------ */
 /* Hero                                                                */
 /* ------------------------------------------------------------------ */
 
@@ -3232,6 +3383,10 @@ button:disabled {
 
   .search-box input {
     width: 100%;
+  }
+
+  .catalog-banners {
+    grid-template-columns: 1fr;
   }
 
   .hero-content {

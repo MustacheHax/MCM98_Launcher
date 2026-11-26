@@ -54,6 +54,8 @@ export function ProductDrawer(): JSX.Element | null {
   const [restorePath, setRestorePath] = useState<string | null>(null)
   const [restoreBusy, setRestoreBusy] = useState(false)
   const selectedId = selected?.id
+  const installed = selected ? findInstalled(library, selected) : undefined
+  const installedId = installed?.id
 
   useEffect(() => {
     closeRef.current?.focus()
@@ -69,12 +71,13 @@ export function ProductDrawer(): JSX.Element | null {
   }, [closeProduct])
 
   // Save-folder detection touches the disk, so it runs per opened product.
+  // Local data is keyed by the installed manifest id, not the catalog id.
   useEffect(() => {
     let alive = true
     setSaves(null)
-    if (!selectedId) return
+    if (!installedId) return
     void bridge
-      .getSaveInfo(selectedId)
+      .getSaveInfo(installedId)
       .then((info) => {
         if (alive) setSaves(info)
       })
@@ -84,7 +87,7 @@ export function ProductDrawer(): JSX.Element | null {
     return () => {
       alive = false
     }
-  }, [bridge, selectedId])
+  }, [bridge, installedId])
 
   // Release history powers both the patch notes and the version picker.
   useEffect(() => {
@@ -113,12 +116,11 @@ export function ProductDrawer(): JSX.Element | null {
 
   if (!selected) return null
 
-  const installed = findInstalled(library, selected.id)
-  const task = activeTaskFor(tasks, selected.id)
-  const isRunning = running.includes(selected.id)
+  const task = activeTaskFor(tasks, installedId ?? selected.id)
+  const isRunning = running.includes(installedId ?? selected.id)
   const updateAvailable = Boolean(updateFor(selected))
   const updateSkipped = isUpdateSkipped(selected)
-  const repairing = repairingId === selected.id
+  const repairing = repairingId === (installedId ?? selected.id)
   const percent = task ? Math.round(taskProgress(task)) : 0
   const indeterminate =
     task?.phase === 'extracting' || task?.phase === 'verifying' || task?.phase === 'finalizing'
@@ -138,17 +140,19 @@ export function ProductDrawer(): JSX.Element | null {
   }
 
   const openSaves = async (): Promise<void> => {
+    if (!installedId) return
     try {
-      await bridge.openSaveFolder(selected.id)
+      await bridge.openSaveFolder(installedId)
     } catch (error) {
       toast(errorMessage(error), 'error')
     }
   }
 
   const makeSaveBackup = async (): Promise<void> => {
+    if (!installedId) return
     setSavesBusy(true)
     try {
-      const result = await bridge.backupSaves(selected.id)
+      const result = await bridge.backupSaves(installedId)
       toast(`Save backup written (${formatBytes(result.bytes)}).`, 'success')
     } catch (error) {
       toast(errorMessage(error), 'error')
@@ -158,11 +162,12 @@ export function ProductDrawer(): JSX.Element | null {
   }
 
   const openRestore = async (): Promise<void> => {
+    if (!installedId) return
     setRestoreOpen(true)
     setRestorePath(null)
     setBackups(null)
     try {
-      setBackups(await bridge.listSaveBackups(selected.id))
+      setBackups(await bridge.listSaveBackups(installedId))
     } catch (error) {
       setBackups([])
       toast(errorMessage(error), 'error')
@@ -170,9 +175,10 @@ export function ProductDrawer(): JSX.Element | null {
   }
 
   const restoreBackup = async (path: string): Promise<void> => {
+    if (!installedId) return
     setRestoreBusy(true)
     try {
-      const result = await bridge.restoreSaves(selected.id, path)
+      const result = await bridge.restoreSaves(installedId, path)
       toast(
         `Restored ${result.files} save file${result.files === 1 ? '' : 's'} (${formatBytes(result.bytes)}).`,
         'success'
@@ -187,8 +193,9 @@ export function ProductDrawer(): JSX.Element | null {
   }
 
   const doRollback = async (): Promise<void> => {
+    if (!installedId) return
     setRollbackArmed(false)
-    await rollbackProduct(selected.id)
+    await rollbackProduct(installedId)
   }
 
   const statusLabel = isRunning
@@ -376,7 +383,7 @@ export function ProductDrawer(): JSX.Element | null {
                   {updateSkipped && (
                     <button
                       className="text-button"
-                      onClick={() => void unskipUpdate(selected.id)}
+                      onClick={() => void unskipUpdate(installedId ?? selected.id)}
                     >
                       Skipped {releaseVersionLabel(selected.release)} · Update anyway
                     </button>

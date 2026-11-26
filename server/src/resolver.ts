@@ -352,6 +352,7 @@ export async function resolveProduct(
     status: 'unavailable',
     error: null,
     platform,
+    repoCreatedAt: repo?.created_at ?? null,
     availablePlatforms: [],
     release: null,
     install: null

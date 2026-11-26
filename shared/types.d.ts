@@ -47,6 +47,8 @@ export interface ProductEntry {
   error: string | null
   /** Platform this entry was resolved for. */
   platform: Platform
+  /** When the GitHub repository was created; powers the Newest! banner. */
+  repoCreatedAt?: string | null
   availablePlatforms: Platform[]
   release: ReleaseInfo | null
   install: InstallHint | null
